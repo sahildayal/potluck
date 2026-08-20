@@ -51,10 +51,17 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'potluck_app') THEN
     CREATE ROLE potluck_app NOLOGIN NOBYPASSRLS;
   END IF;
+  -- The auth handler needs its own identity: it must read sessions before it
+  -- knows who the caller is, which is exactly the thing app.user_id gating
+  -- cannot express. Splitting the role keeps that exception narrow and visible
+  -- instead of punching a hole in the app role's policies.
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'potluck_auth') THEN
+    CREATE ROLE potluck_auth NOLOGIN NOBYPASSRLS;
+  END IF;
 END
 $$;
 
-GRANT USAGE ON SCHEMA public TO potluck_app;
+GRANT USAGE ON SCHEMA public TO potluck_app, potluck_auth;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO potluck_app;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO potluck_app;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
@@ -65,6 +72,12 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
 -- being able to enumerate the table.
 REVOKE ALL ON invite_codes FROM potluck_app;
 
+-- Credentials and session tokens are off-limits to the application entirely.
+-- Even a total compromise of a request handler cannot read a password hash or
+-- steal a session token, because its role has no privilege on these tables.
+REVOKE ALL ON sessions, accounts, verifications FROM potluck_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON sessions, accounts, verifications, users TO potluck_auth;
+
 -- ---------------------------------------------------------------------------
 -- Enable + force RLS everywhere
 -- ---------------------------------------------------------------------------
@@ -74,13 +87,30 @@ BEGIN
   FOREACH t IN ARRAY ARRAY[
     'users', 'categories', 'recipes', 'ingredients', 'steps', 'recipe_photos',
     'recipe_categories', 'friendships', 'recipe_shares', 'attempts',
-    'attempt_hides', 'shopping_items', 'import_jobs', 'invite_codes'
+    'attempt_hides', 'shopping_items', 'import_jobs', 'invite_codes',
+    'sessions', 'accounts', 'verifications'
   ] LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
     EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
   END LOOP;
 END
 $$;
+
+-- ---------------------------------------------------------------------------
+-- Auth service access
+-- ---------------------------------------------------------------------------
+-- Scoped TO potluck_auth, so these policies simply do not exist for the
+-- application role. This is the one place identity gating does not apply, and
+-- confining it to three tables and one role is what keeps that honest.
+CREATE POLICY sessions_auth ON sessions FOR ALL TO potluck_auth
+  USING (true) WITH CHECK (true);
+CREATE POLICY accounts_auth ON accounts FOR ALL TO potluck_auth
+  USING (true) WITH CHECK (true);
+CREATE POLICY verifications_auth ON verifications FOR ALL TO potluck_auth
+  USING (true) WITH CHECK (true);
+-- Signup has to create the user row before any session exists to identify them.
+CREATE POLICY users_auth ON users FOR ALL TO potluck_auth
+  USING (true) WITH CHECK (true);
 
 -- ---------------------------------------------------------------------------
 -- users

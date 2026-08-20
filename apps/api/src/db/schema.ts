@@ -25,6 +25,14 @@ const customBytea = customType<{ data: Buffer; driverData: Buffer }>({
  * table RLS cannot protect — `rls.test.ts` fails the build if one appears.
  */
 
+/**
+ * One users table, shared by better-auth and the app.
+ *
+ * better-auth owns `display_name`, `email`, `email_verified`, `avatar_key` and
+ * the timestamps (mapped from its `name` / `image` field names in auth.ts).
+ * Everything else is ours. Keeping it as one table avoids the join-on-every-
+ * request that a split design forces, and keeps the RLS policies simple.
+ */
 export const users = pgTable(
   'users',
   {
@@ -32,17 +40,73 @@ export const users = pgTable(
     handle: text('handle').notNull(),
     displayName: text('display_name').notNull(),
     email: text('email').notNull(),
+    emailVerified: boolean('email_verified').notNull().default(false),
     avatarKey: text('avatar_key'),
     theme: text('theme').notNull().default('system'),
     unitPreference: text('unit_preference').notNull().default('metric'),
     invitedBy: uuid('invited_by'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     uniqueIndex('users_handle_key').on(t.handle),
     uniqueIndex('users_email_key').on(t.email),
   ],
 );
+
+/**
+ * better-auth's own tables.
+ *
+ * These are deliberately unreachable by the application role. Sessions have to
+ * be resolved *before* we know who the caller is, so they cannot sit behind the
+ * same app.user_id gate as everything else — which means the honest way to
+ * protect them is a separate database role that only the auth handler uses.
+ * `potluck_app` is granted nothing on these three tables at all.
+ */
+export const sessions = pgTable(
+  'sessions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    token: text('token').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    ipAddress: text('ip_address'),
+    userAgent: text('user_agent'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('sessions_token_key').on(t.token)],
+);
+
+export const accounts = pgTable('accounts', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  accountId: text('account_id').notNull(),
+  providerId: text('provider_id').notNull(),
+  /** argon2id hash for the credential provider. Never leaves the database. */
+  password: text('password'),
+  accessToken: text('access_token'),
+  refreshToken: text('refresh_token'),
+  idToken: text('id_token'),
+  accessTokenExpiresAt: timestamp('access_token_expires_at', { withTimezone: true }),
+  refreshTokenExpiresAt: timestamp('refresh_token_expires_at', { withTimezone: true }),
+  scope: text('scope'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const verifications = pgTable('verifications', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  identifier: text('identifier').notNull(),
+  value: text('value').notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
 
 /**
  * Signup is invite-only. A code is single-use: redeemedBy is set in the same

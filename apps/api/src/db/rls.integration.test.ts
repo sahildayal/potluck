@@ -48,6 +48,7 @@ beforeAll(async () => {
 
   // The app role must be able to assume its identity from the owner session.
   await sql`GRANT potluck_app TO potluck_owner`;
+  await sql`GRANT potluck_auth TO potluck_owner`;
 
   const [a] = await sql<{ id: string }[]>`
     INSERT INTO users (handle, display_name, email)
@@ -234,6 +235,50 @@ describe('invite codes', () => {
 
     const result = await as(carol, (tx) => tx`SELECT redeem_invite('STALE', ${carol}) AS ok`);
     expect(result[0]!['ok']).toBe(false);
+  });
+});
+
+describe('credential isolation', () => {
+  it('does not let the application role read session tokens', async () => {
+    // A compromised request handler must not be able to steal a session.
+    await expect(as(alice, (tx) => tx`SELECT token FROM sessions`)).rejects.toThrow();
+  });
+
+  it('does not let the application role read password hashes', async () => {
+    await expect(as(alice, (tx) => tx`SELECT password FROM accounts`)).rejects.toThrow();
+  });
+
+  it('does not let the application role read verification tokens', async () => {
+    await expect(as(alice, (tx) => tx`SELECT value FROM verifications`)).rejects.toThrow();
+  });
+
+  it('does not let the application role write a session either', async () => {
+    await expect(
+      as(alice, (tx) => tx`
+        INSERT INTO sessions (user_id, token, expires_at)
+        VALUES (${alice}, 'forged-token', now() + interval '1 day')`),
+    ).rejects.toThrow();
+  });
+
+  it('lets the auth role do its job', async () => {
+    // The exception exists, is narrow, and is asserted rather than assumed.
+    const rows = await sql.begin(async (tx) => {
+      await tx`SET LOCAL ROLE potluck_auth`;
+      await tx`
+        INSERT INTO sessions (user_id, token, expires_at)
+        VALUES (${alice}, 'real-token', now() + interval '1 day')`;
+      return tx`SELECT token FROM sessions WHERE token = 'real-token'`;
+    });
+    expect(rows).toHaveLength(1);
+  });
+
+  it('confines the auth role to auth tables — it cannot read recipes', async () => {
+    await expect(
+      sql.begin(async (tx) => {
+        await tx`SET LOCAL ROLE potluck_auth`;
+        return tx`SELECT * FROM recipes`;
+      }),
+    ).rejects.toThrow();
   });
 });
 
