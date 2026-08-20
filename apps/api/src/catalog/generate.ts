@@ -34,9 +34,17 @@ export interface GeneratedRecipe {
 
 const MODEL = 'openai/gpt-oss-20b';
 const BATCH_SIZE = 6;
-const TOKENS_PER_MINUTE = 6000;
+
+/**
+ * A starting guess only. Groq reports the real budget on every response —
+ * x-ratelimit-remaining-tokens and x-ratelimit-reset-tokens — so the limiter
+ * follows what the service actually says rather than a number hardcoded here.
+ * Measured on 2026-08-20 the limit was 8,000 tokens/min, not the 6,000 the docs
+ * implied, so this was pacing 25% slower than necessary.
+ */
+const ASSUMED_TOKENS_PER_MINUTE = 8000;
 /** Leave headroom so a long reply does not tip us over the limit. */
-const SAFETY = 0.78;
+const SAFETY = 0.85;
 
 function prompt(cells: Cell[]): string {
   const briefs = cells
@@ -77,34 +85,59 @@ interface Usage {
   total_tokens?: number;
 }
 
-/** Paces requests against a rolling one-minute token window. */
+/**
+ * Paces requests against what the service reports it has left.
+ *
+ * An earlier version modelled a rolling one-minute window locally. That works
+ * until the model is wrong — and it was, by 25% — or until something else uses
+ * the same key. Reading the headers is both simpler and correct.
+ */
 class RateLimiter {
-  private readonly window: { at: number; tokens: number }[] = [];
+  private remaining = ASSUMED_TOKENS_PER_MINUTE;
+  private resetAt = Date.now();
 
-  record(tokens: number): void {
-    this.window.push({ at: Date.now(), tokens });
+  /** Feeds back what the service said after the last call. */
+  observe(headers: Headers, fallbackTokens: number): void {
+    const remaining = Number(headers.get('x-ratelimit-remaining-tokens'));
+    const reset = parseDuration(headers.get('x-ratelimit-reset-tokens'));
+
+    if (Number.isFinite(remaining)) {
+      this.remaining = remaining;
+    } else {
+      this.remaining = Math.max(0, this.remaining - fallbackTokens);
+    }
+    this.resetAt = Date.now() + (reset ?? 60_000);
   }
 
-  /** After a 429 the service's view of our usage is authoritative, not ours. */
+  /** After a 429 the service's view is authoritative and ours is discarded. */
   reset(): void {
-    this.window.length = 0;
-    this.window.push({ at: Date.now(), tokens: TOKENS_PER_MINUTE });
+    this.remaining = 0;
+    this.resetAt = Date.now() + 60_000;
   }
 
   /** Milliseconds to wait before spending roughly `expected` more tokens. */
   waitFor(expected: number): number {
-    const now = Date.now();
-    while (this.window.length > 0 && now - (this.window[0] as { at: number }).at > 60_000) {
-      this.window.shift();
-    }
-    const used = this.window.reduce((sum, entry) => sum + entry.tokens, 0);
-    const budget = TOKENS_PER_MINUTE * SAFETY;
-    if (used + expected <= budget) return 0;
-
-    const oldest = this.window[0];
-    if (oldest === undefined) return 0;
-    return Math.max(0, 60_000 - (now - oldest.at) + 250);
+    if (this.remaining >= expected / SAFETY) return 0;
+    return Math.max(0, this.resetAt - Date.now() + 500);
   }
+}
+
+/** Groq expresses resets as "577ms", "1.2s", "20m9.6s". */
+export function parseDuration(value: string | null): number | null {
+  if (value === null || value.length === 0) return null;
+  const pattern = /([0-9.]+)(ms|s|m|h)/g;
+  let total = 0;
+  let matched = false;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(value)) !== null) {
+    const amount = Number(match[1]);
+    if (!Number.isFinite(amount)) continue;
+    matched = true;
+    const unit = match[2];
+    total +=
+      unit === 'ms' ? amount : unit === 's' ? amount * 1000 : unit === 'm' ? amount * 60_000 : amount * 3_600_000;
+  }
+  return matched ? total : null;
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -161,8 +194,8 @@ export async function generateCatalog(options: GenerateOptions): Promise<{
 
     let batch: GeneratedRecipe[] = [];
     try {
-      const { recipes, tokens } = await requestBatch(baseUrl, apiKey, cells);
-      limiter.record(tokens);
+      const { recipes, tokens, headers } = await requestBatch(baseUrl, apiKey, cells);
+      limiter.observe(headers, tokens);
       batch = recipes;
       consecutiveFailures = 0;
     } catch (error) {
@@ -216,7 +249,7 @@ async function requestBatch(
   baseUrl: string,
   apiKey: string,
   cells: Cell[],
-): Promise<{ recipes: GeneratedRecipe[]; tokens: number }> {
+): Promise<{ recipes: GeneratedRecipe[]; tokens: number; headers: Headers }> {
   const response = await fetch(`${baseUrl}/chat/completions`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
@@ -262,7 +295,7 @@ async function requestBatch(
     .map((item, index) => normalise(item, cells[index] ?? (cells[0] as Cell)))
     .filter((r): r is GeneratedRecipe => r !== null);
 
-  return { recipes, tokens: payload.usage?.total_tokens ?? 2500 };
+  return { recipes, tokens: payload.usage?.total_tokens ?? 2500, headers: response.headers };
 }
 
 /**

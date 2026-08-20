@@ -165,7 +165,7 @@ export function RecipeEditor({ id, user }: { id?: string; user: SessionUser }) {
 }
 
 /** Blank lines are separators people type by habit, not empty ingredients. */
-function toLines(value: string): string[] {
+export function toLines(value: string): string[] {
   return value
     .split('\n')
     .map((line) => line.trim())
@@ -173,7 +173,7 @@ function toLines(value: string): string[] {
 }
 
 /** Steps are paragraph-separated so a step can wrap onto several lines. */
-function toParagraphs(value: string): string[] {
+export function toParagraphs(value: string): string[] {
   return value
     .split(/\n\s*\n/)
     .map((block) => block.trim().replace(/\s*\n\s*/g, ' '))
