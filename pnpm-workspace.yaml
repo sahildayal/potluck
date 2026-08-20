@@ -6,12 +6,14 @@ packages:
 # this file — the "pnpm" key in package.json is no longer read.
 #
 # esbuild and @tailwindcss/oxide ship native binaries that a postinstall script
-# fetches. argon2 compiles a native addon for password hashing. Without these
-# entries the install "succeeds" and the packages are quietly broken at runtime.
+# fetches. Without these entries the install "succeeds" and the packages are
+# quietly broken at runtime.
+#
+# No argon2 entry: better-auth hashes with scrypt from Node's own crypto module,
+# so there is no native addon to build.
 allowBuilds:
   esbuild: true
   '@tailwindcss/oxide': true
-  argon2: true
 
   # Testcontainers pulls these in. ssh2 and protobufjs need their build steps;
   # cpu-features is an optional native accelerator for ssh2 that needs a C++

@@ -1,6 +1,7 @@
 import {
   boolean,
   customType,
+  index,
   integer,
   pgTable,
   primaryKey,
@@ -77,17 +78,22 @@ export const sessions = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex('sessions_token_key').on(t.token)],
+  (t) => [uniqueIndex('sessions_token_key').on(t.token), index('sessions_user_id_idx').on(t.userId)],
 );
 
-export const accounts = pgTable('accounts', {
+export const accounts = pgTable(
+  'accounts',
+  {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: uuid('user_id')
     .notNull()
     .references(() => users.id, { onDelete: 'cascade' }),
+  /** Added in better-auth 1.7; unique with accountId. */
+  issuer: text('issuer').notNull(),
   accountId: text('account_id').notNull(),
   providerId: text('provider_id').notNull(),
-  /** argon2id hash for the credential provider. Never leaves the database. */
+  /** scrypt hash (better-auth's default) for the credential provider.
+   *  Never leaves the database — potluck_app has no privilege on this table. */
   password: text('password'),
   accessToken: text('access_token'),
   refreshToken: text('refresh_token'),
@@ -97,16 +103,25 @@ export const accounts = pgTable('accounts', {
   scope: text('scope'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+  },
+  (t) => [
+    uniqueIndex('accounts_issuer_account_id_key').on(t.issuer, t.accountId),
+    index('accounts_user_id_idx').on(t.userId),
+  ],
+);
 
-export const verifications = pgTable('verifications', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  identifier: text('identifier').notNull(),
-  value: text('value').notNull(),
-  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+export const verifications = pgTable(
+  'verifications',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    identifier: text('identifier').notNull(),
+    value: text('value').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('verifications_identifier_idx').on(t.identifier)],
+);
 
 /**
  * Signup is invite-only. A code is single-use: redeemedBy is set in the same

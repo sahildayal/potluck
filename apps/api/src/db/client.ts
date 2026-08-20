@@ -76,18 +76,25 @@ export async function asAuthService<T>(fn: (tx: ScopedDatabase) => Promise<T>): 
  * only way that mistake gets noticed before it leaks data.
  */
 export async function assertRlsEnforced(): Promise<void> {
-  const [{ bypasses }] = await db.transaction(async (tx) => {
-    await tx.execute(sql`SET LOCAL ROLE potluck_app`);
-    const result = await tx.execute<{ bypasses: boolean }>(
-      sql`SELECT rolbypassrls AS bypasses FROM pg_roles WHERE rolname = current_user`,
-    );
-    return result as unknown as { bypasses: boolean }[];
+  const rows = await sqlClient.begin(async (tx) => {
+    // If this line throws, the grant in rls.sql has not run — which would leave
+    // the app running as the bypassing owner. That is a startup failure too.
+    await tx`SET LOCAL ROLE potluck_app`;
+    return tx<{ role: string; bypasses: boolean }[]>`
+      SELECT current_user AS role,
+             (rolsuper OR rolbypassrls) AS bypasses
+        FROM pg_roles WHERE rolname = current_user`;
   });
 
-  if (bypasses !== false) {
+  const state = rows[0];
+  if (state === undefined) {
+    throw new Error('Refusing to start: could not determine the database role.');
+  }
+  if (state.bypasses) {
     throw new Error(
-      'Refusing to start: the database role can bypass row-level security. ' +
-        'Check that rls.sql has run and that DATABASE_URL is not a superuser.',
+      `Refusing to start: role "${state.role}" can bypass row-level security, ` +
+        'so every authorization policy would be inert. Check that rls.sql has ' +
+        'run and that DATABASE_URL is not a superuser.',
     );
   }
 }
