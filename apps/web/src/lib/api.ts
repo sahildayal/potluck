@@ -84,6 +84,15 @@ export interface Category {
   isDefault: boolean;
 }
 
+export interface ShoppingItem {
+  id: string;
+  item: string;
+  qtyCanonical: number | null;
+  unitCanonical: 'g' | 'ml' | 'count' | null;
+  recipeId: string | null;
+  checked: boolean;
+}
+
 export const api = {
   me: () => request<{ user: SessionUser | null }>('/api/me'),
 
@@ -127,6 +136,31 @@ export const api = {
       }),
     fork: (id: string) =>
       request<{ recipe: RecipeDetail }>(`/api/recipes/${id}/fork`, { method: 'POST' }),
+  },
+
+  shopping: {
+    list: () => request<{ items: ShoppingItem[] }>('/api/shopping'),
+    add: (item: string) =>
+      request<{ item: ShoppingItem }>('/api/shopping', {
+        method: 'POST',
+        body: JSON.stringify({ item }),
+      }),
+    fromRecipe: (recipeId: string) =>
+      request<{ items: ShoppingItem[] }>(`/api/shopping/from-recipe/${recipeId}`, {
+        method: 'POST',
+        body: '{}',
+      }),
+    check: (id: string, checked: boolean) =>
+      request<{ item: ShoppingItem }>(`/api/shopping/${id}/check`, {
+        method: 'POST',
+        body: JSON.stringify({ checked }),
+      }),
+    remove: (id: string) => request<unknown>(`/api/shopping/${id}`, { method: 'DELETE' }),
+    clearChecked: () =>
+      request<{ cleared: number }>('/api/shopping/clear-checked', {
+        method: 'POST',
+        body: '{}',
+      }),
   },
 
   categories: {

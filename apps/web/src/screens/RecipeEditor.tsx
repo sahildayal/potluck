@@ -72,23 +72,24 @@ export function RecipeEditor({ id, user }: { id?: string; user: SessionUser }) {
 
   return (
     <form
-      className="mx-auto min-h-dvh w-full max-w-2xl px-5 pb-16"
+      className="wash-lilac safe-top min-h-dvh px-5 pb-16"
       onSubmit={(event) => {
         event.preventDefault();
         setError(null);
         save.mutate();
       }}
     >
-      <nav className="py-5">
+      <div className="mx-auto w-full max-w-2xl">
+      <nav className="py-4">
         <Link
           href={editing ? `/recipe/${id}` : '/'}
-          className="text-sm text-muted underline underline-offset-2"
+          className="inline-block rounded-full bg-surface px-4 py-2 text-sm font-bold shadow-[var(--shadow-card)]"
         >
           Cancel
         </Link>
       </nav>
 
-      <h1 className="font-display text-3xl">{editing ? 'Edit recipe' : 'Add a recipe'}</h1>
+      <h1 className="font-display text-[2rem] leading-none">{editing ? 'Edit recipe' : 'Add a recipe'}</h1>
 
       <div className="mt-6 flex flex-col gap-5">
         <Text label="Title" value={title} onChange={setTitle} required />
@@ -146,7 +147,7 @@ export function RecipeEditor({ id, user }: { id?: string; user: SessionUser }) {
       </div>
 
       {error !== null && (
-        <p role="alert" className="mt-5 rounded border-l-2 border-chilli bg-chilli-soft px-3 py-2">
+        <p role="alert" className="mt-5 rounded-2xl bg-danger-soft px-4 py-3 font-medium text-danger">
           {error}
         </p>
       )}
@@ -154,10 +155,11 @@ export function RecipeEditor({ id, user }: { id?: string; user: SessionUser }) {
       <button
         type="submit"
         disabled={save.isPending || title.trim().length === 0}
-        className="mt-7 w-full rounded-md bg-enamel px-4 py-3.5 font-medium text-enamel-ink disabled:opacity-60"
+        className="mt-7 w-full rounded-full bg-primary px-4 py-4 font-bold text-primary-ink disabled:opacity-50"
       >
         {save.isPending ? 'Saving…' : editing ? 'Save changes' : 'Add to my recipes'}
       </button>
+      </div>
     </form>
   );
 }
@@ -191,7 +193,7 @@ function Text({ label, value, onChange, hint, required, inputMode }: TextProps) 
   const id = `f-${label.toLowerCase().replace(/[^a-z]+/g, '-')}`;
   return (
     <div>
-      <label htmlFor={id} className="mb-1 block text-sm font-medium">
+      <label htmlFor={id} className="mb-1.5 block text-sm font-bold">
         {label}
       </label>
       <input
@@ -200,7 +202,7 @@ function Text({ label, value, onChange, hint, required, inputMode }: TextProps) 
         required={required}
         inputMode={inputMode}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-md border border-line bg-surface px-3 py-2.5 outline-none focus:border-enamel"
+        className="w-full rounded-2xl border-2 border-line bg-surface px-4 py-3 outline-none focus:border-ink"
       />
       {hint !== undefined && <p className="mt-1 text-xs text-muted">{hint}</p>}
     </div>
@@ -218,7 +220,7 @@ function Area({
   const id = `f-${label.toLowerCase().replace(/[^a-z]+/g, '-')}`;
   return (
     <div>
-      <label htmlFor={id} className="mb-1 block text-sm font-medium">
+      <label htmlFor={id} className="mb-1.5 block text-sm font-bold">
         {label}
       </label>
       <textarea
@@ -227,7 +229,7 @@ function Area({
         value={value}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full resize-y rounded-md border border-line bg-surface px-3 py-2.5 outline-none focus:border-enamel"
+        className="w-full resize-y rounded-2xl border-2 border-line bg-surface px-4 py-3 outline-none focus:border-ink"
       />
       {hint !== undefined && <p className="mt-1 text-xs text-muted">{hint}</p>}
     </div>

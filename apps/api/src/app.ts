@@ -9,6 +9,7 @@ import { withSession, type AppEnv } from './middleware/session.js';
 import { categoryRoutes } from './routes/categories.js';
 import { photoRoutes } from './routes/photos.js';
 import { recipeRoutes } from './routes/recipes.js';
+import { shoppingRoutes } from './routes/shopping.js';
 
 const env = loadEnv();
 
@@ -64,6 +65,7 @@ export function createApp(): Hono<AppEnv> {
   app.route('/api/recipes', recipeRoutes());
   app.route('/api/categories', categoryRoutes());
   app.route('/api/photos', photoRoutes());
+  app.route('/api/shopping', shoppingRoutes());
 
   app.notFound((c) => c.json({ error: 'Not found' }, 404));
 

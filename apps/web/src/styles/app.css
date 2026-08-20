@@ -1,108 +1,162 @@
 @import 'tailwindcss';
 
 /* =========================================================================
-   Potluck — "Enamelware"
+   Potluck — "Pantry Pastel"
    =========================================================================
-   The visual world is the speckled blue-and-white enamel pot: the one that
-   lives on the back of the stove, gets chipped, and outlives everything else
-   in the kitchen. Chip-white grounds, a muted enamel blue that never shouts,
-   a dark rim ink, and saffron held back for exactly two jobs — the favourite
-   star and a running timer — so that when you see it, it means something.
+   Built to the reference: soft candy grounds, butter-cream cards with big
+   radii, pill chips carrying meaning through colour, a dark pill nav, and
+   monoline doodles in coral.
 
-   Deliberately not warm cream with a terracotta accent. That palette is both
-   the most common AI-generated default and one this project already rejected
-   once. Warmth here comes from saffron and from the slab serif, not paper.
+   The pastels are a semantic set, not decoration. Lime always means a rating,
+   lilac always means time, peach always means effort, blush always means a
+   favourite. Used consistently, colour becomes something you can read at a
+   glance instead of something you have to parse.
+
+   Dark mode is not in the reference, but the requirements ask for it. Rather
+   than dimming the pastels into mud, the roles invert: the tint becomes a deep
+   ground and the pastel becomes the text on it, so a chip stays as legible and
+   as meaningful as it is in daylight.
    ========================================================================= */
 
 :root {
-  --c-ground: #eff2f1;
+  --c-ground: #fbfaef;
   --c-surface: #ffffff;
-  --c-raised: #e4e9e8;
-  --c-ink: #14212a;
-  --c-muted: #5a6b74;
-  --c-line: #d3dcdb;
-  --c-line-strong: #b6c3c2;
+  --c-card: #fafbe8;
+  --c-raised: #f2f1e0;
+  --c-ink: #1c1a17;
+  --c-muted: #6b6659;
+  --c-line: #e6e4d2;
+  --c-line-strong: #cdcab4;
 
-  --c-enamel: #2b6079;
-  --c-enamel-ink: #ffffff;
-  --c-enamel-soft: #e1ebf0;
+  /* Primary actions are near-black pills, as in the reference. */
+  --c-primary: #1c1a17;
+  --c-primary-ink: #fbfaef;
 
-  --c-saffron: #b87d09;
-  --c-saffron-soft: #faf0d9;
+  /* The illustration stroke. One warm accent, used only for doodles. */
+  --c-coral: #ef5a3c;
 
-  --c-chilli: #a8382a;
-  --c-chilli-soft: #f8e7e4;
+  /* Semantic chip set: fill + the ink that sits on it. */
+  --c-lime: #dcee94;
+  --c-lime-ink: #3b4712;
+  --c-lilac: #ded2ef;
+  --c-lilac-ink: #3e2e5c;
+  --c-blush: #fbd5e3;
+  --c-blush-ink: #6b2440;
+  --c-peach: #f9c4ac;
+  --c-peach-ink: #6e3418;
+  --c-mint: #c7e9d8;
+  --c-mint-ink: #1f4d38;
 
-  --shadow-card: 0 1px 2px rgb(20 33 42 / 0.06), 0 1px 1px rgb(20 33 42 / 0.04);
-  --shadow-lift: 0 4px 16px rgb(20 33 42 / 0.1);
+  --c-danger: #c0392b;
+  --c-danger-soft: #fbe3df;
+
+  --shadow-card: 0 1px 2px rgb(28 26 23 / 0.05), 0 6px 20px -8px rgb(28 26 23 / 0.12);
+  --shadow-lift: 0 8px 28px -8px rgb(28 26 23 / 0.28);
+
+  --radius-card: 22px;
+  --radius-block: 18px;
+  --radius-pill: 999px;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
-    --c-ground: #101a20;
-    --c-surface: #182530;
-    --c-raised: #1f2e39;
-    --c-ink: #e6edef;
-    --c-muted: #94a7b0;
-    --c-line: #26363f;
-    --c-line-strong: #3a4d58;
+    --c-ground: #17150f;
+    --c-surface: #211e16;
+    --c-card: #211e16;
+    --c-raised: #2b271d;
+    --c-ink: #f4f1e6;
+    --c-muted: #a39c88;
+    --c-line: #332e22;
+    --c-line-strong: #4a442f;
 
-    --c-enamel: #74b9d9;
-    --c-enamel-ink: #0b1419;
-    --c-enamel-soft: #162b36;
+    --c-primary: #f4f1e6;
+    --c-primary-ink: #17150f;
 
-    --c-saffron: #e5b342;
-    --c-saffron-soft: #2c2312;
+    --c-coral: #ff7a5e;
 
-    --c-chilli: #e07a66;
-    --c-chilli-soft: #2e1a16;
+    --c-lime: #3b4712;
+    --c-lime-ink: #dcee94;
+    --c-lilac: #35284f;
+    --c-lilac-ink: #ded2ef;
+    --c-blush: #4a1c2e;
+    --c-blush-ink: #fbd5e3;
+    --c-peach: #5a2a13;
+    --c-peach-ink: #f9c4ac;
+    --c-mint: #1c3f2f;
+    --c-mint-ink: #c7e9d8;
 
-    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4);
-    --shadow-lift: 0 4px 18px rgb(0 0 0 / 0.5);
+    --c-danger: #f08878;
+    --c-danger-soft: #3a1a15;
+
+    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.5);
+    --shadow-lift: 0 8px 28px -8px rgb(0 0 0 / 0.7);
   }
 }
 
 :root[data-theme='dark'] {
-  --c-ground: #101a20;
-  --c-surface: #182530;
-  --c-raised: #1f2e39;
-  --c-ink: #e6edef;
-  --c-muted: #94a7b0;
-  --c-line: #26363f;
-  --c-line-strong: #3a4d58;
+  --c-ground: #17150f;
+  --c-surface: #211e16;
+  --c-card: #211e16;
+  --c-raised: #2b271d;
+  --c-ink: #f4f1e6;
+  --c-muted: #a39c88;
+  --c-line: #332e22;
+  --c-line-strong: #4a442f;
 
-  --c-enamel: #74b9d9;
-  --c-enamel-ink: #0b1419;
-  --c-enamel-soft: #162b36;
+  --c-primary: #f4f1e6;
+  --c-primary-ink: #17150f;
 
-  --c-saffron: #e5b342;
-  --c-saffron-soft: #2c2312;
+  --c-coral: #ff7a5e;
 
-  --c-chilli: #e07a66;
-  --c-chilli-soft: #2e1a16;
+  --c-lime: #3b4712;
+  --c-lime-ink: #dcee94;
+  --c-lilac: #35284f;
+  --c-lilac-ink: #ded2ef;
+  --c-blush: #4a1c2e;
+  --c-blush-ink: #fbd5e3;
+  --c-peach: #5a2a13;
+  --c-peach-ink: #f9c4ac;
+  --c-mint: #1c3f2f;
+  --c-mint-ink: #c7e9d8;
 
-  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4);
-  --shadow-lift: 0 4px 18px rgb(0 0 0 / 0.5);
+  --c-danger: #f08878;
+  --c-danger-soft: #3a1a15;
+
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.5);
+  --shadow-lift: 0 8px 28px -8px rgb(0 0 0 / 0.7);
 }
 
 @theme inline {
   --color-ground: var(--c-ground);
   --color-surface: var(--c-surface);
+  --color-card: var(--c-card);
   --color-raised: var(--c-raised);
   --color-ink: var(--c-ink);
   --color-muted: var(--c-muted);
   --color-line: var(--c-line);
   --color-line-strong: var(--c-line-strong);
-  --color-enamel: var(--c-enamel);
-  --color-enamel-ink: var(--c-enamel-ink);
-  --color-enamel-soft: var(--c-enamel-soft);
-  --color-saffron: var(--c-saffron);
-  --color-saffron-soft: var(--c-saffron-soft);
-  --color-chilli: var(--c-chilli);
-  --color-chilli-soft: var(--c-chilli-soft);
+  --color-primary: var(--c-primary);
+  --color-primary-ink: var(--c-primary-ink);
+  --color-coral: var(--c-coral);
 
-  --font-display: 'Zilla Slab', Georgia, 'Times New Roman', serif;
-  --font-body: 'Source Sans 3', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --color-lime: var(--c-lime);
+  --color-lime-ink: var(--c-lime-ink);
+  --color-lilac: var(--c-lilac);
+  --color-lilac-ink: var(--c-lilac-ink);
+  --color-blush: var(--c-blush);
+  --color-blush-ink: var(--c-blush-ink);
+  --color-peach: var(--c-peach);
+  --color-peach-ink: var(--c-peach-ink);
+  --color-mint: var(--c-mint);
+  --color-mint-ink: var(--c-mint-ink);
+  --color-danger: var(--c-danger);
+  --color-danger-soft: var(--c-danger-soft);
+
+  --radius-card: var(--radius-card);
+  --radius-block: var(--radius-block);
+
+  --font-display: 'Bricolage Grotesque', 'Trebuchet MS', system-ui, sans-serif;
+  --font-body: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 
 * {
@@ -123,44 +177,74 @@ body {
   font-size: 16px;
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
-  /* Home-screen install: keep content clear of the notch and home indicator. */
-  padding: env(safe-area-inset-top) env(safe-area-inset-right)
-    env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 
 h1,
 h2,
 h3 {
   font-family: var(--font-display);
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  line-height: 1.15;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
   text-wrap: balance;
   margin: 0;
 }
 
-/* Quantities and timers line up in columns, so they get tabular figures. */
 .tnum {
   font-variant-numeric: tabular-nums;
 }
 
-/* Keyboard focus must stay obvious — this app gets used one-handed and by
-   people who are not looking directly at the screen. */
 :where(a, button, input, textarea, select, [tabindex]):focus-visible {
-  outline: 2px solid var(--c-enamel);
+  outline: 3px solid var(--c-ink);
   outline-offset: 2px;
-  border-radius: 4px;
+  border-radius: 8px;
 }
 
-/* The one texture in the palette: the speckle of enamelware. Used on exactly
-   one surface — the sign-in screen — so it reads as a material, not a pattern
-   library. */
-.speckled {
-  background-image:
-    radial-gradient(circle at 20% 30%, var(--c-line) 0.7px, transparent 0.8px),
-    radial-gradient(circle at 70% 60%, var(--c-line) 0.6px, transparent 0.7px),
-    radial-gradient(circle at 45% 85%, var(--c-line) 0.5px, transparent 0.6px);
-  background-size: 44px 44px, 62px 62px, 38px 38px;
+/* -------------------------------------------------------------------------
+   Screen washes
+   -------------------------------------------------------------------------
+   Each screen sits on its own soft gradient rather than a flat colour, which
+   is most of where the reference's warmth comes from. Kept very low contrast
+   so text legibility never depends on where on the screen it lands.
+   ------------------------------------------------------------------------- */
+.wash-lime {
+  background:
+    radial-gradient(120% 60% at 50% 0%, color-mix(in oklab, var(--c-lime) 70%, transparent), transparent 70%),
+    var(--c-ground);
+}
+.wash-blush {
+  background:
+    radial-gradient(120% 60% at 50% 0%, color-mix(in oklab, var(--c-blush) 70%, transparent), transparent 70%),
+    var(--c-ground);
+}
+.wash-lilac {
+  background:
+    radial-gradient(120% 60% at 50% 0%, color-mix(in oklab, var(--c-lilac) 70%, transparent), transparent 70%),
+    var(--c-ground);
+}
+.wash-mint {
+  background:
+    radial-gradient(120% 60% at 50% 0%, color-mix(in oklab, var(--c-mint) 70%, transparent), transparent 70%),
+    var(--c-ground);
+}
+
+/* A horizontally scrolling rail should not show a scrollbar chrome paints over
+   the content. The rail is still keyboard and wheel scrollable. */
+.rail {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.rail::-webkit-scrollbar {
+  display: none;
+}
+
+/* Safe-area padding for an installed app, applied where it is needed rather
+   than on body — a full-bleed wash must reach the edges of the screen. */
+.safe-top {
+  padding-top: max(env(safe-area-inset-top), 0.5rem);
+}
+.safe-bottom {
+  padding-bottom: max(env(safe-area-inset-bottom), 0.5rem);
 }
 
 @media (prefers-reduced-motion: reduce) {

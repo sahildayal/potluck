@@ -13,10 +13,10 @@ export default defineConfig({
         name: 'Potluck',
         short_name: 'Potluck',
         description: 'Everyone brings a dish.',
-        // Matches --ground in the enamel palette, so the splash screen does not
-        // flash a different colour before the app paints.
-        background_color: '#EFF2F1',
-        theme_color: '#2B6079',
+        // Matches --ground, so the splash screen does not flash a different
+        // colour before the app paints.
+        background_color: '#FBFAEF',
+        theme_color: '#FBFAEF',
         display: 'standalone',
         orientation: 'portrait',
         start_url: '/',

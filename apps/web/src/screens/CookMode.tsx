@@ -14,7 +14,7 @@ import { api, type SessionUser } from '../lib/api.ts';
  * screen kept awake.
  *
  * The signature is the timer. A duration detected in the step text becomes a
- * saffron band that drains across the bottom of the screen as it runs — legible
+ * coral band that drains across the bottom of the screen as it runs — legible
  * from across the room without reading a single digit, which is the actual job.
  */
 export function CookMode({ id, user }: { id: string; user: SessionUser }) {
@@ -51,17 +51,17 @@ export function CookMode({ id, user }: { id: string; user: SessionUser }) {
   if (recipe === undefined || step === undefined) return <Centered>Nothing to cook here.</Centered>;
 
   return (
-    <div className="relative flex min-h-dvh flex-col bg-ground">
+    <div className="wash-lilac safe-top relative flex min-h-dvh flex-col">
       <header className="flex items-center justify-between px-5 py-4">
         <button
           type="button"
           onClick={() => navigate(`/recipe/${id}`)}
-          className="text-sm text-muted underline underline-offset-2"
+          className="rounded-full bg-surface px-4 py-2 text-sm font-bold shadow-[var(--shadow-card)]"
         >
           Stop cooking
         </button>
-        <p className="tnum text-sm text-muted">
-          Step {index + 1} of {total}
+        <p className="tnum rounded-full bg-primary px-4 py-2 text-sm font-bold text-primary-ink">
+          {index + 1} of {total}
         </p>
       </header>
 
@@ -84,7 +84,7 @@ export function CookMode({ id, user }: { id: string; user: SessionUser }) {
           className="absolute inset-y-0 right-0 w-2/3 cursor-e-resize disabled:cursor-default"
         />
 
-        <p className="pointer-events-none relative mx-auto max-w-2xl text-[clamp(1.75rem,5.5vw,3rem)] leading-[1.25] font-medium">
+        <p className="pointer-events-none relative mx-auto max-w-2xl font-display text-[clamp(1.9rem,6vw,3.25rem)] leading-[1.18]">
           {step.body}
         </p>
       </main>
@@ -145,16 +145,16 @@ function Timer({ seconds }: { seconds: number }) {
             setRunning((r) => !r);
           }
         }}
-        className="flex w-full items-baseline justify-between rounded-md border border-line bg-surface px-4 py-3"
+        className="flex w-full items-center justify-between rounded-full bg-primary px-6 py-4 text-primary-ink shadow-[var(--shadow-lift)]"
       >
-        <span className="font-medium">
-          {done ? 'Time’s up — start again' : running ? 'Pause' : `Start ${formatDuration(seconds)}`}
+        <span className="font-bold">
+          {done ? 'Time’s up — go again' : running ? 'Pause' : 'Start timer'}
         </span>
         <span className="tnum font-display text-2xl">{formatDuration(remaining)}</span>
       </button>
 
       <div
-        className="mt-3 h-2 w-full overflow-hidden rounded-full bg-raised"
+        className="mt-3 h-3 w-full overflow-hidden rounded-full bg-surface"
         role="progressbar"
         aria-valuemin={0}
         aria-valuemax={seconds}
@@ -162,7 +162,7 @@ function Timer({ seconds }: { seconds: number }) {
         aria-label="Time remaining"
       >
         <div
-          className="h-full rounded-full bg-saffron transition-[width] duration-1000 ease-linear"
+          className="h-full rounded-full bg-coral transition-[width] duration-1000 ease-linear"
           style={{ width: `${fraction * 100}%` }}
         />
       </div>
@@ -176,8 +176,8 @@ function StepDots({ total, index }: { total: number; index: number }) {
       {Array.from({ length: total }, (_, i) => (
         <span
           key={i}
-          className={`h-1.5 rounded-full transition-all ${
-            i === index ? 'w-6 bg-enamel' : 'w-1.5 bg-line-strong'
+          className={`h-2 rounded-full transition-all ${
+            i === index ? 'w-8 bg-primary' : 'w-2 bg-line-strong'
           }`}
         />
       ))}
@@ -231,5 +231,7 @@ function useWakeLock(active: boolean): void {
 }
 
 function Centered({ children }: { children: React.ReactNode }) {
-  return <div className="grid min-h-dvh place-items-center p-8 text-muted">{children}</div>;
+  return (
+    <div className="wash-lilac grid min-h-dvh place-items-center p-8 text-muted">{children}</div>
+  );
 }

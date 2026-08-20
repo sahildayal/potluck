@@ -2,18 +2,22 @@ import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'wouter';
 import { api, type RecipeSummary, type SessionUser } from '../lib/api.ts';
-import { Star } from '../components/Star.tsx';
+import { RecipeCard } from '../components/RecipeCard.tsx';
+import { BottomNav, NavSpacer } from '../components/BottomNav.tsx';
+import { Doodle } from '../components/Doodle.tsx';
+import { Chip } from '../components/Chip.tsx';
 
 /**
- * Home.
+ * The collection.
  *
- * Search sits above everything because with a thousand recipes it becomes the
- * primary way in. Favourites come next as their own shelf — the requirement
- * asks for them to be "easily visible and easily accessible", and a shelf you
- * never scroll past is the honest reading of that.
+ * Category chips sit under the search field as a horizontal rail, so switching
+ * section is a thumb-reach away rather than a scroll. "All" is always first and
+ * always selected on arrival, because the most common thing you want is
+ * everything.
  */
 export function Home({ user }: { user: SessionUser }) {
   const [query, setQuery] = useState('');
+  const [category, setCategory] = useState<string | null>(null);
 
   const recipes = useQuery({ queryKey: ['recipes'], queryFn: api.recipes.list });
   const categories = useQuery({ queryKey: ['categories'], queryFn: api.categories.list });
@@ -21,151 +25,156 @@ export function Home({ user }: { user: SessionUser }) {
   const all = recipes.data?.recipes ?? [];
 
   /**
-   * Search runs in the browser, not the database.
-   *
-   * A user's whole collection caps at a thousand rows of mostly short text, so
-   * filtering locally is instant, works with the backend asleep, and costs the
-   * free tier nothing. A server-side search index would be more machinery for
-   * a worse experience at this size.
+   * Search runs in the browser. A collection caps at a thousand rows of short
+   * text, so filtering locally is instant, works with the backend asleep, and
+   * costs the free tier nothing.
    */
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
     if (needle.length === 0) return all;
     return all.filter(
       (r) =>
-        r.title.toLowerCase().includes(needle) ||
-        r.attributedTo.toLowerCase().includes(needle),
+        r.title.toLowerCase().includes(needle) || r.attributedTo.toLowerCase().includes(needle),
     );
   }, [all, query]);
 
-  const favourites = filtered.filter((r) => r.isFavorite);
-  const searching = query.trim().length > 0;
-
   return (
-    <div className="mx-auto min-h-dvh w-full max-w-3xl px-5 pb-28">
-      <header className="flex items-baseline justify-between pt-8 pb-6">
-        <h1 className="font-display text-3xl">Potluck</h1>
-        <Link href="/settings" className="text-sm text-muted underline underline-offset-2">
-          {user.handle}
-        </Link>
-      </header>
+    <div className="wash-lime safe-top min-h-dvh">
+      <div className="mx-auto w-full max-w-2xl px-5">
+        <header className="flex items-center justify-between pt-4 pb-5">
+          <div>
+            <p className="text-sm font-semibold text-muted">Hi {user.name.split(' ')[0]}</p>
+            <h1 className="font-display text-[2rem] leading-none">What are we making?</h1>
+          </div>
+          <Link
+            href="/you"
+            aria-label="Your profile"
+            className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-primary font-display text-lg text-primary-ink"
+          >
+            {user.name.charAt(0).toUpperCase()}
+          </Link>
+        </header>
 
-      <search className="sticky top-0 z-10 -mx-5 bg-ground/95 px-5 pb-4 backdrop-blur">
-        <input
-          type="search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search your recipes"
-          aria-label="Search your recipes"
-          className="w-full rounded-md border border-line bg-surface px-4 py-3 outline-none focus:border-enamel"
-        />
-      </search>
+        <search className="block">
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search your recipes"
+            aria-label="Search your recipes"
+            className="w-full rounded-full border-2 border-line bg-surface px-5 py-3.5 outline-none focus:border-ink"
+          />
+        </search>
 
-      {recipes.isLoading && <p className="py-10 text-center text-muted">Fetching recipes…</p>}
+        {(categories.data?.categories.length ?? 0) > 0 && (
+          <div className="rail -mx-5 mt-4 flex gap-2 overflow-x-auto px-5 pb-1">
+            <CategoryChip label="All" active={category === null} onClick={() => setCategory(null)} />
+            {categories.data?.categories.map((c) => (
+              <CategoryChip
+                key={c.id}
+                label={c.name}
+                active={category === c.id}
+                onClick={() => setCategory(category === c.id ? null : c.id)}
+              />
+            ))}
+          </div>
+        )}
 
-      {recipes.isError && (
-        <p className="rounded border-l-2 border-chilli bg-chilli-soft px-4 py-3">
-          Couldn&rsquo;t load your recipes. Check your connection and pull to refresh.
+        <p className="mt-6 mb-3 font-display text-xl">
+          {filtered.length} {filtered.length === 1 ? 'recipe' : 'recipes'}
         </p>
-      )}
 
-      {recipes.isSuccess && all.length === 0 && <EmptyKitchen />}
+        {recipes.isLoading && <p className="py-10 text-center text-muted">Fetching recipes…</p>}
 
-      {recipes.isSuccess && all.length > 0 && searching && (
-        <Shelf
-          title={`${filtered.length} ${filtered.length === 1 ? 'match' : 'matches'}`}
-          recipes={filtered}
-        />
-      )}
+        {recipes.isError && (
+          <p className="rounded-2xl bg-danger-soft px-4 py-3 font-medium text-danger">
+            Couldn&rsquo;t load your recipes. Check your connection and try again.
+          </p>
+        )}
 
-      {recipes.isSuccess && all.length > 0 && !searching && (
-        <>
-          {favourites.length > 0 && <Shelf title="Favourites" recipes={favourites} starred />}
-          {(categories.data?.categories ?? []).map((category) => (
-            <CategoryShelf key={category.id} name={category.name} recipes={filtered} />
+        {recipes.isSuccess && all.length === 0 && <EmptyKitchen />}
+
+        {recipes.isSuccess && all.length > 0 && filtered.length === 0 && (
+          <NoMatches query={query} />
+        )}
+
+        <ul className="flex flex-col gap-3">
+          {filtered.map((recipe) => (
+            <li key={recipe.id}>
+              <RecipeCard recipe={recipe} />
+            </li>
           ))}
-          <Shelf title="Everything" recipes={filtered} />
-        </>
-      )}
+        </ul>
+
+        <NavSpacer />
+      </div>
 
       <Link
         href="/recipe/new"
-        className="fixed right-5 bottom-6 left-5 mx-auto flex max-w-3xl items-center justify-center rounded-md bg-enamel px-4 py-3.5 font-medium text-enamel-ink shadow-[var(--shadow-lift)]"
+        className="safe-bottom fixed right-5 bottom-24 z-20 grid h-14 w-14 place-items-center rounded-full bg-coral text-2xl font-bold text-white shadow-[var(--shadow-lift)]"
+        aria-label="Add a recipe"
       >
-        Add a recipe
+        +
       </Link>
+
+      <BottomNav />
     </div>
+  );
+}
+
+function CategoryChip({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`shrink-0 rounded-full px-4 py-2 text-sm font-bold whitespace-nowrap transition-colors ${
+        active ? 'bg-primary text-primary-ink' : 'bg-surface text-muted'
+      }`}
+    >
+      {label}
+    </button>
   );
 }
 
 function EmptyKitchen() {
   return (
-    <div className="rounded-lg border border-dashed border-line-strong px-6 py-14 text-center">
-      <h2 className="font-display text-2xl">Nothing in the kitchen yet</h2>
+    <div className="rounded-[var(--radius-card)] bg-card px-6 py-12 text-center shadow-[var(--shadow-card)]">
+      <div className="mx-auto mb-4 grid h-20 w-20 place-items-center rounded-full bg-peach text-peach-ink">
+        <Doodle name="pot" className="h-11 w-11" />
+      </div>
+      <h2 className="font-display text-2xl">Nothing on the stove yet</h2>
       <p className="mx-auto mt-2 max-w-xs text-muted">
-        Paste a link, photograph a recipe card, or type one in. It all ends up in the same place.
+        Type a recipe in, paste a link, or photograph a card. They all end up in the same place.
+      </p>
+      <Link
+        href="/recipe/new"
+        className="mt-5 inline-block rounded-full bg-primary px-6 py-3 font-bold text-primary-ink"
+      >
+        Add your first recipe
+      </Link>
+    </div>
+  );
+}
+
+function NoMatches({ query }: { query: string }) {
+  return (
+    <div className="rounded-[var(--radius-card)] bg-card px-6 py-10 text-center shadow-[var(--shadow-card)]">
+      <Chip tone="lilac">no matches</Chip>
+      <p className="mt-3 text-muted">
+        Nothing here for &ldquo;{query}&rdquo;. Try a shorter word, or the name of whoever gave it
+        to you.
       </p>
     </div>
   );
 }
 
-/**
- * Category shelves are currently unfiltered by category membership because the
- * list endpoint does not return category ids yet; showing every recipe under
- * every heading would be a lie, so a shelf with nothing to put in it renders
- * nothing at all rather than an empty heading.
- */
-function CategoryShelf({ name, recipes }: { name: string; recipes: RecipeSummary[] }) {
-  void recipes;
-  void name;
-  return null;
-}
-
-function Shelf({
-  title,
-  recipes,
-  starred = false,
-}: {
-  title: string;
-  recipes: RecipeSummary[];
-  starred?: boolean;
-}) {
-  if (recipes.length === 0) return null;
-
-  return (
-    <section className="mt-8">
-      <h2 className="mb-3 flex items-center gap-2 font-display text-xl">
-        {starred && <Star filled className="h-4 w-4 text-saffron" />}
-        {title}
-      </h2>
-      <ul className="flex flex-col gap-2">
-        {recipes.map((recipe) => (
-          <li key={recipe.id}>
-            <RecipeRow recipe={recipe} />
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
-function RecipeRow({ recipe }: { recipe: RecipeSummary }) {
-  return (
-    <Link
-      href={`/recipe/${recipe.id}`}
-      className="flex items-center gap-3 rounded-md border border-line bg-surface px-4 py-3 transition-shadow hover:shadow-[var(--shadow-card)]"
-    >
-      <div className="min-w-0 flex-1">
-        <p className="truncate font-display text-lg leading-tight">{recipe.title}</p>
-        <p className="mt-0.5 truncate text-sm text-muted">
-          {recipe.attributedTo.length > 0 && <span>{recipe.attributedTo}&rsquo;s · </span>}
-          {recipe.servings !== null && <span className="tnum">serves {recipe.servings}</span>}
-        </p>
-      </div>
-      {recipe.isFavorite && <Star filled className="h-4 w-4 shrink-0 text-saffron" />}
-      {recipe.rating !== null && (
-        <span className="tnum shrink-0 text-sm text-muted">{recipe.rating}/5</span>
-      )}
-    </Link>
-  );
-}
+export type { RecipeSummary };

@@ -5,7 +5,9 @@ import { SignIn } from './screens/SignIn.tsx';
 import { Home } from './screens/Home.tsx';
 import { RecipeDetail } from './screens/RecipeDetail.tsx';
 import { CookMode } from './screens/CookMode.tsx';
-import { Settings } from './screens/Settings.tsx';
+import { You } from './screens/You.tsx';
+import { Favourites } from './screens/Favourites.tsx';
+import { Shopping } from './screens/Shopping.tsx';
 import { RecipeEditor } from './screens/RecipeEditor.tsx';
 
 export function App() {
@@ -13,8 +15,8 @@ export function App() {
 
   if (session.isLoading) {
     return (
-      <div className="grid min-h-dvh place-items-center">
-        <p className="text-muted">Setting the table…</p>
+      <div className="wash-lime grid min-h-dvh place-items-center">
+        <p className="font-display text-xl">Setting the table…</p>
       </div>
     );
   }
@@ -30,14 +32,20 @@ export function App() {
       <Route path="/recipe/:id/edit">{(p) => <RecipeEditor user={user} id={p.id} />}</Route>
       <Route path="/recipe/:id/cook">{(p) => <CookMode id={p.id} user={user} />}</Route>
       <Route path="/recipe/:id">{(p) => <RecipeDetail id={p.id} user={user} />}</Route>
-      <Route path="/settings">{() => <Settings user={user} />}</Route>
+      <Route path="/favourites">{() => <Favourites user={user} />}</Route>
+      <Route path="/shopping">{() => <Shopping user={user} />}</Route>
+      <Route path="/you">{() => <You user={user} />}</Route>
+      <Route path="/settings">{() => <You user={user} />}</Route>
       <Route>
         {() => (
-          <div className="grid min-h-dvh place-items-center p-8 text-center">
+          <div className="wash-lime grid min-h-dvh place-items-center p-8 text-center">
             <div>
-              <h1 className="text-2xl">Nothing here</h1>
+              <h1 className="font-display text-3xl">Nothing here</h1>
               <p className="mt-2 text-muted">That page doesn&rsquo;t exist.</p>
-              <a className="mt-4 inline-block text-enamel underline" href="/">
+              <a
+                className="mt-5 inline-block rounded-full bg-primary px-6 py-3 font-bold text-primary-ink"
+                href="/"
+              >
                 Back to your recipes
               </a>
             </div>

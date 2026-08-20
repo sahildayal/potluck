@@ -1,13 +1,16 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../lib/api.ts';
+import { CookingScene } from '../components/Doodle.tsx';
+import { WordPills } from '../components/Chip.tsx';
 
 /**
  * Sign in / join.
  *
- * The only screen carrying the enamel speckle, so the texture reads as the
- * material the app is made of rather than a decorative pattern reused
- * everywhere. Everything past this point is plain surfaces.
+ * The hero is the thing the app is actually about: a pot on the hob with
+ * something in it. Drawn rather than photographed, because a photograph of
+ * someone else's food is a stock-image promise the app cannot keep, and a
+ * drawing is honest about being an invitation.
  */
 export function SignIn() {
   const queryClient = useQueryClient();
@@ -33,33 +36,43 @@ export function SignIn() {
       }
       await queryClient.invalidateQueries({ queryKey: ['me'] });
     } catch (caught) {
-      setError(
-        caught instanceof ApiError ? caught.message : 'Could not reach Potluck. Try again.',
-      );
+      setError(caught instanceof ApiError ? caught.message : 'Could not reach Potluck. Try again.');
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <main className="speckled grid min-h-dvh place-items-center px-5 py-10">
-      <div className="w-full max-w-sm">
-        <header className="mb-8">
-          <h1 className="font-display text-5xl leading-none">Potluck</h1>
-          <p className="mt-2 text-lg text-muted">Everyone brings a dish.</p>
+    <main className="wash-lime safe-top min-h-dvh px-5 pb-10">
+      <div className="mx-auto w-full max-w-sm">
+        <div className="pt-6 text-coral">
+          <CookingScene className="mx-auto h-40 w-full max-w-xs" />
+        </div>
+
+        <header className="mt-2 text-center">
+          <h1 className="font-display text-[2.75rem] leading-none">Potluck</h1>
+          <p className="mt-3 text-lg font-semibold">
+            <WordPills
+              words={[
+                { text: 'everyone', tone: 'lilac' },
+                { text: 'brings', tone: 'peach' },
+                { text: 'a dish', tone: 'mint' },
+              ]}
+            />
+          </p>
         </header>
 
         <form
           onSubmit={submit}
-          className="rounded-lg border border-line bg-surface p-6 shadow-[var(--shadow-card)]"
+          className="mt-7 rounded-[var(--radius-card)] bg-card p-5 shadow-[var(--shadow-card)]"
         >
-          <div className="mb-5 flex gap-1 rounded-md bg-raised p-1">
+          <div className="mb-5 flex gap-1 rounded-full bg-raised p-1">
             <button
               type="button"
               onClick={() => setMode('in')}
               aria-pressed={!joining}
-              className={`flex-1 rounded px-3 py-2 text-sm font-medium transition-colors ${
-                !joining ? 'bg-surface text-ink shadow-[var(--shadow-card)]' : 'text-muted'
+              className={`flex-1 rounded-full px-3 py-2 text-sm font-bold transition-colors ${
+                !joining ? 'bg-primary text-primary-ink' : 'text-muted'
               }`}
             >
               Sign in
@@ -68,8 +81,8 @@ export function SignIn() {
               type="button"
               onClick={() => setMode('up')}
               aria-pressed={joining}
-              className={`flex-1 rounded px-3 py-2 text-sm font-medium transition-colors ${
-                joining ? 'bg-surface text-ink shadow-[var(--shadow-card)]' : 'text-muted'
+              className={`flex-1 rounded-full px-3 py-2 text-sm font-bold transition-colors ${
+                joining ? 'bg-primary text-primary-ink' : 'text-muted'
               }`}
             >
               Join
@@ -85,17 +98,11 @@ export function SignIn() {
                   value={handle}
                   onChange={setHandle}
                   autoComplete="username"
-                  hint="How friends find you. Letters and numbers."
+                  hint="How friends find you."
                 />
               </>
             )}
-            <Field
-              label="Email"
-              type="email"
-              value={email}
-              onChange={setEmail}
-              autoComplete="email"
-            />
+            <Field label="Email" type="email" value={email} onChange={setEmail} autoComplete="email" />
             <Field
               label="Password"
               type="password"
@@ -109,7 +116,7 @@ export function SignIn() {
           {error !== null && (
             <p
               role="alert"
-              className="mt-4 rounded border-l-2 border-chilli bg-chilli-soft px-3 py-2 text-sm"
+              className="mt-4 rounded-2xl bg-danger-soft px-4 py-3 text-sm font-medium text-danger"
             >
               {error}
             </p>
@@ -118,16 +125,14 @@ export function SignIn() {
           <button
             type="submit"
             disabled={busy}
-            className="mt-6 w-full rounded-md bg-enamel px-4 py-3 font-medium text-enamel-ink transition-opacity disabled:opacity-60"
+            className="mt-6 w-full rounded-full bg-primary px-4 py-3.5 font-bold text-primary-ink transition-opacity disabled:opacity-60"
           >
             {busy ? 'One moment…' : joining ? 'Join Potluck' : 'Sign in'}
           </button>
         </form>
 
         <p className="mt-6 text-center text-sm text-muted">
-          {joining
-            ? 'Joining puts your recipes in your own kitchen. Nothing is shared until you share it.'
-            : 'Your recipes are yours. Friends only see what you hand them.'}
+          Your recipes are yours. Friends only see what you hand them.
         </p>
       </div>
     </main>
@@ -147,7 +152,7 @@ function Field({ label, value, onChange, type = 'text', autoComplete, hint }: Fi
   const id = `field-${label.toLowerCase().replace(/\s+/g, '-')}`;
   return (
     <div>
-      <label htmlFor={id} className="mb-1 block text-sm font-medium">
+      <label htmlFor={id} className="mb-1.5 block text-sm font-bold">
         {label}
       </label>
       <input
@@ -157,7 +162,7 @@ function Field({ label, value, onChange, type = 'text', autoComplete, hint }: Fi
         autoComplete={autoComplete}
         onChange={(e) => onChange(e.target.value)}
         required
-        className="w-full rounded-md border border-line bg-ground px-3 py-2.5 text-ink outline-none focus:border-enamel"
+        className="w-full rounded-2xl border-2 border-line bg-surface px-4 py-3 text-ink outline-none focus:border-ink"
       />
       {hint !== undefined && <p className="mt-1 text-xs text-muted">{hint}</p>}
     </div>
