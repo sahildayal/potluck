@@ -36,7 +36,7 @@ async function as<T>(userId: string | null, run: (tx: postgres.TransactionSql) =
 }
 
 beforeAll(async () => {
-  container = await new PostgreSqlContainer('postgres:16-alpine')
+  container = await new PostgreSqlContainer('postgres:18-alpine')
     .withDatabase('potluck')
     .withUsername('potluck_owner')
     .withPassword('test-password')
@@ -279,6 +279,37 @@ describe('credential isolation', () => {
         return tx`SELECT * FROM recipes`;
       }),
     ).rejects.toThrow();
+  });
+});
+
+describe('production parity: the login role bypasses RLS', () => {
+  /**
+   * This is the most important test in the file and the least obvious.
+   *
+   * Neon's neondb_owner has rolbypassrls = true, and the container's owner is a
+   * superuser, so in BOTH environments the role the app logs in as ignores every
+   * policy. All the isolation above depends entirely on asUser() issuing
+   * `SET LOCAL ROLE potluck_app` first. These two tests pin that down so nobody
+   * later "simplifies" the role switch away and silently disables the lot.
+   */
+  it('leaks everything when the role is NOT switched — this is the failure mode', async () => {
+    const rows = await sql`SELECT id FROM recipes`;
+    expect(rows.length).toBeGreaterThan(0);
+  });
+
+  it('blocks correctly the moment the role IS switched', async () => {
+    const rows = await as(carol, (tx) => tx`SELECT id FROM recipes`);
+    expect(rows).toHaveLength(0);
+  });
+
+  it('reports a login role that can bypass RLS, which is what the boot guard checks', async () => {
+    const [login] = await sql<{ bypass: boolean }[]>`
+      SELECT rolsuper OR rolbypassrls AS bypass FROM pg_roles WHERE rolname = current_user`;
+    expect(login!.bypass).toBe(true);
+
+    const [assumed] = await as(alice, (tx) => tx`
+      SELECT rolsuper OR rolbypassrls AS bypass FROM pg_roles WHERE rolname = current_user`);
+    expect(assumed!['bypass']).toBe(false);
   });
 });
 

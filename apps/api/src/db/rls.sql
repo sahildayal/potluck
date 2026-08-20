@@ -61,6 +61,15 @@ BEGIN
 END
 $$;
 
+-- The application connects as whatever login role the platform gives us
+-- (neondb_owner on Neon, potluck_owner locally) and then assumes one of the two
+-- roles above per transaction. That requires membership, and it is NOT granted
+-- automatically: on Neon, CREATE ROLE by the owner does not confer admin on the
+-- new role, so without this every SET LOCAL ROLE fails with "permission denied"
+-- and the app silently runs as the owner — with none of the isolation applied.
+GRANT potluck_app TO CURRENT_USER;
+GRANT potluck_auth TO CURRENT_USER;
+
 GRANT USAGE ON SCHEMA public TO potluck_app, potluck_auth;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO potluck_app;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO potluck_app;
@@ -92,6 +101,29 @@ BEGIN
   ] LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
     EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
+  END LOOP;
+END
+$$;
+
+-- ---------------------------------------------------------------------------
+-- Drop existing policies before recreating
+-- ---------------------------------------------------------------------------
+-- Postgres has no CREATE POLICY IF NOT EXISTS, and this file re-runs on every
+-- deploy. Dropping first makes it genuinely declarative: what is written below
+-- is exactly what the database ends up with, and deleting a policy from this
+-- file actually removes it rather than leaving a stale rule enforcing something
+-- nobody can find in source control.
+DO $$
+DECLARE p record;
+BEGIN
+  FOR p IN
+    SELECT pol.polname, c.relname
+    FROM pg_policy pol
+    JOIN pg_class c ON c.oid = pol.polrelid
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public'
+  LOOP
+    EXECUTE format('DROP POLICY IF EXISTS %I ON %I', p.polname, p.relname);
   END LOOP;
 END
 $$;
