@@ -1,0 +1,6 @@
+apiVersion: v2
+name: potluck
+description: Recipe keeper for a friend group — API and import worker.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

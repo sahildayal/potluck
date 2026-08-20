@@ -1,0 +1,84 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "potluck.fullname" . }}-api
+  labels:
+    {{- include "potluck.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "potluck.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # One replica on a 1 GB node cannot afford a second pod alongside it
+      # during a rollout, so the old pod goes before the new one arrives. That
+      # is a few seconds of downtime, which is the honest trade for a friend
+      # group of fifteen — pretending otherwise would just OOM the node.
+      maxUnavailable: 1
+      maxSurge: 0
+  template:
+    metadata:
+      labels:
+        {{- include "potluck.labels" . | nindent 8 }}
+        app.kubernetes.io/component: api
+      annotations:
+        # Restart the pods when the secret changes, so rotating a credential
+        # actually takes effect instead of waiting for an unrelated deploy.
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: api
+          image: {{ include "potluck.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.targetPort }}
+          env:
+            {{- include "potluck.env" . | nindent 12 }}
+            # The worker is its own deployment here, so the API must not also
+            # run the queue in-process or every job would be claimed twice.
+            - name: WORKER_INLINE
+              value: {{ .Values.worker.enabled | ternary "false" "true" | quote }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.probes.liveness.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.probes.readiness.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+            failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+          resources:
+            {{- toYaml .Values.resources.api | nindent 12 }}
+          volumeMounts:
+            # readOnlyRootFilesystem is on, so anything that needs to write gets
+            # an explicit emptyDir. Node writes nothing but temp files.
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      # Long enough for an in-flight request to finish; server.ts drains on
+      # SIGTERM and force-exits after 10s, so 30 is generous headroom.
+      terminationGracePeriodSeconds: 30

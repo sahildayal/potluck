@@ -1,0 +1,15 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored.
+
+subscription_id = "c53df4e3-822d-40c2-8786-828589c52676"
+
+# Contents of your public key, not the path:
+#   ssh_public_key = file("~/.ssh/id_ed25519.pub")
+ssh_public_key = "ssh-ed25519 AAAA... you@machine"
+
+# From the Cloudflare Zero Trust dashboard:
+#   Networks -> Tunnels -> Create a tunnel -> copy the token.
+# This is the credential that lets the node be reachable with no public IP.
+cloudflare_tunnel_token = "eyJhIjoi..."
+
+location = "eastus"
+vm_size  = "Standard_B1s"

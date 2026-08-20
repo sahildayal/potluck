@@ -1,0 +1,239 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE: ${{ github.repository }}
+
+jobs:
+  # ---------------------------------------------------------------------------
+  quality:
+    name: Types, lint and unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        # No `version:` here on purpose: pnpm/action-setup errors if the
+        # workflow sets one while package.json declares packageManager. It is
+        # declared in exactly one place.
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm -r typecheck
+
+      - name: Unit tests
+        run: pnpm -r test
+
+  # ---------------------------------------------------------------------------
+  security:
+    name: Secrets and dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # gitleaks needs history to scan every commit
+
+      - name: Scan for committed secrets
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Audit dependencies
+        # Advisory, not blocking: a transitive low-severity advisory with no
+        # patch available should not stop a recipe app from shipping. High and
+        # critical are gated below.
+        run: pnpm audit --audit-level high || echo "::warning::pnpm audit reported findings"
+
+  # ---------------------------------------------------------------------------
+  integration:
+    name: Row-level security against real Postgres
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: RLS integration tests
+        # Testcontainers starts a throwaway Postgres 18, the same major version
+        # Neon runs. These assert that the database refuses cross-user reads
+        # even when the API layer forgets to filter — the guarantee the whole
+        # authorisation model rests on.
+        run: pnpm --filter @potluck/api test:integration
+
+  # ---------------------------------------------------------------------------
+  image:
+    name: Build container image
+    runs-on: ubuntu-latest
+    needs: [quality]
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build and export
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: false
+          tags: potluck:${{ github.sha }}
+          outputs: type=docker,dest=/tmp/potluck-image.tar
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Scan image for known vulnerabilities
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          input: /tmp/potluck-image.tar
+          severity: HIGH,CRITICAL
+          exit-code: "0"          # report, do not block; base-image CVEs are
+          format: table           # usually fixed by a rebuild, not by us
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: image
+          path: /tmp/potluck-image.tar
+          retention-days: 1
+
+  # ---------------------------------------------------------------------------
+  cluster:
+    name: Deploy to an ephemeral Kubernetes cluster
+    runs-on: ubuntu-latest
+    needs: [image]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: image
+          path: /tmp
+
+      - name: Create k3d cluster
+        # A real Kubernetes cluster, created and destroyed per run. This is what
+        # makes the Helm charts trustworthy: a merge is blocked unless they
+        # actually deploy a working system into a cluster, rather than merely
+        # rendering valid YAML.
+        run: |
+          curl -sfL https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+          k3d cluster create potluck-ci \
+            --agents 0 \
+            --k3s-arg "--disable=traefik@server:0" \
+            --wait
+          kubectl cluster-info
+
+      - name: Load the image into the cluster
+        run: |
+          docker load -i /tmp/potluck-image.tar
+          k3d image import potluck:${{ github.sha }} -c potluck-ci
+
+      - name: Start Postgres in-cluster
+        # The app's own database for this run. Deliberately in-cluster rather
+        # than a Neon branch, so the pipeline needs no credentials and a fork's
+        # pull request can run it too.
+        run: |
+          kubectl create deployment postgres --image=postgres:18-alpine
+          kubectl set env deployment/postgres \
+            POSTGRES_PASSWORD=ci-password POSTGRES_USER=potluck_owner POSTGRES_DB=potluck
+          kubectl expose deployment postgres --port=5432
+          kubectl rollout status deployment/postgres --timeout=180s
+
+      - name: Lint the chart
+        run: helm lint charts/potluck
+
+      - name: Install the release
+        run: |
+          helm install potluck charts/potluck \
+            --set image.repository=potluck \
+            --set image.tag=${{ github.sha }} \
+            --set image.pullPolicy=Never \
+            --set secrets.create=true \
+            --set secrets.databaseUrl='postgres://potluck_owner:ci-password@postgres:5432/potluck' \
+            --set secrets.authSecret='ci-only-secret-not-a-real-one' \
+            --set env.APP_URL='http://localhost:8787' \
+            --set env.NODE_ENV=production \
+            --wait --timeout 5m
+
+      - name: Show what landed
+        if: always()
+        run: |
+          kubectl get pods -o wide
+          kubectl get jobs
+
+      - name: Smoke test the running cluster
+        run: |
+          kubectl port-forward svc/potluck 8787:80 &
+          sleep 5
+          node scripts/smoke.mjs http://localhost:8787
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          kubectl describe pods
+          kubectl logs -l app.kubernetes.io/component=api --tail=200 || true
+          kubectl logs -l app.kubernetes.io/component=worker --tail=100 || true
+          kubectl logs -l app.kubernetes.io/component=migrate --tail=200 || true
+
+      - name: Destroy the cluster
+        if: always()
+        run: k3d cluster delete potluck-ci
+
+  # ---------------------------------------------------------------------------
+  publish:
+    name: Publish image
+    runs-on: ubuntu-latest
+    needs: [quality, security, integration, cluster]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE }}:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

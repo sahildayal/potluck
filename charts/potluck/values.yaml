@@ -1,0 +1,83 @@
+# Defaults target the real deployment target: a single Azure B1s with 1 GB of
+# RAM. CI overrides what it needs to via --set; nothing here assumes a cluster
+# larger than the one this actually runs on.
+
+image:
+  repository: ghcr.io/sahildayal/potluck
+  tag: ""            # defaults to .Chart.AppVersion; CI sets the commit sha
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+replicaCount: 1
+
+# The API and the import worker are the SAME image with different roles. On a
+# real cluster they are separate deployments that can be scaled and restarted
+# independently; on Render, where 750 free instance-hours buys exactly one
+# always-on service, the API runs the worker in-process instead. Same code,
+# different topology.
+worker:
+  enabled: true
+  replicaCount: 1
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8787
+
+# Sized so both pods plus k3s itself fit in 1 GB. Requests are what the
+# scheduler reserves; limits are what the kubelet kills at. Setting both means
+# eviction is predictable rather than the kernel OOM-killer choosing a victim.
+resources:
+  api:
+    requests:
+      cpu: 50m
+      memory: 160Mi
+    limits:
+      memory: 256Mi
+  worker:
+    requests:
+      cpu: 25m
+      memory: 96Mi
+    limits:
+      memory: 192Mi
+
+# Liveness deliberately does NOT touch the database. Kubernetes restarts a pod
+# that fails liveness, and restarting the API because Neon briefly suspended
+# would turn a recoverable blip into a crash loop. Readiness does check it, so
+# a pod that cannot reach Postgres is pulled from the Service instead.
+probes:
+  liveness:
+    path: /health
+    initialDelaySeconds: 10
+    periodSeconds: 20
+  readiness:
+    path: /ready
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    failureThreshold: 3
+
+# Applied by a Helm pre-upgrade hook so the schema is never behind the code.
+migrations:
+  enabled: true
+
+env:
+  APP_URL: https://potluck.example.com
+  NODE_ENV: production
+
+# In CI these come from --set. In production they come from a Secret created
+# out of band; the chart never contains a real credential.
+secrets:
+  create: false
+  name: potluck-secrets
+  databaseUrl: ""
+  authSecret: ""
+  groqApiKey: ""
+
+# Cloudflare Tunnel means no Ingress, no LoadBalancer and no public IP: the
+# cluster dials out to Cloudflare rather than accepting connections. Disabled in
+# CI, where the test suite talks to the Service directly.
+tunnel:
+  enabled: false
+  image: cloudflare/cloudflared:latest
+  secretName: potluck-tunnel

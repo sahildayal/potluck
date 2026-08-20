@@ -1,0 +1,75 @@
+#cloud-config
+# Brings a bare Ubuntu node up as a single-node k3s cluster with a Cloudflare
+# Tunnel, with no inbound port ever opened.
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - curl
+  - ca-certificates
+
+write_files:
+  # 1 GB is genuinely tight for k3s plus the app, so a swap file acts as a shock
+  # absorber. It is not a substitute for memory — it stops a transient spike
+  # during an image pull from OOM-killing the API.
+  - path: /etc/systemd/system/potluck-swap.service
+    content: |
+      [Unit]
+      Description=Create and enable a swap file
+      ConditionPathExists=!/swapfile
+      [Service]
+      Type=oneshot
+      ExecStart=/bin/bash -c "fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile && echo '/swapfile none swap sw 0 0' >> /etc/fstab"
+      RemainAfterExit=yes
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /etc/sysctl.d/99-potluck.conf
+    content: |
+      # Prefer reclaiming page cache over swapping application memory; on a node
+      # this small, swapping the API out shows up as seconds of latency.
+      vm.swappiness=10
+      vm.overcommit_memory=1
+      fs.inotify.max_user_instances=512
+
+runcmd:
+  - systemctl daemon-reload
+  - systemctl enable --now potluck-swap.service
+  - sysctl --system
+
+  # k3s with the bundled extras disabled. Traefik and servicelb exist to get
+  # traffic in from outside; the Cloudflare Tunnel does that job, and each one
+  # kept would cost 50-100 MB of a 1 GB budget for nothing. metrics-server goes
+  # too — Grafana Cloud handles metrics.
+  - |
+    curl -sfL https://get.k3s.io | \
+      INSTALL_K3S_VERSION="${k3s_version}" \
+      INSTALL_K3S_EXEC="server \
+        --disable=traefik \
+        --disable=servicelb \
+        --disable=metrics-server \
+        --disable-cloud-controller \
+        --write-kubeconfig-mode=640" \
+      sh -
+
+  - until k3s kubectl get nodes 2>/dev/null | grep -q " Ready "; do sleep 5; done
+
+  # cloudflared runs as a host service rather than in-cluster, so the tunnel is
+  # up even when the cluster is not — which is precisely when you need to get in
+  # and find out why.
+  - |
+    curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg \
+      -o /usr/share/keyrings/cloudflare-main.gpg
+    echo "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main" \
+      > /etc/apt/sources.list.d/cloudflared.list
+    apt-get update && apt-get install -y cloudflared
+    cloudflared service install "${tunnel_token}"
+
+  - |
+    mkdir -p /home/potluck/.kube
+    cp /etc/rancher/k3s/k3s.yaml /home/potluck/.kube/config
+    chown -R potluck:potluck /home/potluck/.kube
+    chmod 600 /home/potluck/.kube/config
+
+final_message: "potluck node ready after $UPTIME seconds"
