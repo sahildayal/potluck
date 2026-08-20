@@ -208,6 +208,8 @@ jobs:
       - name: Diagnostics on failure
         if: failure()
         run: |
+          kubectl get events --sort-by=.lastTimestamp | tail -40
+          kubectl get secrets
           kubectl describe pods
           kubectl logs -l app.kubernetes.io/component=api --tail=200 || true
           kubectl logs -l app.kubernetes.io/component=worker --tail=100 || true
