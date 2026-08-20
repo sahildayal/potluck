@@ -1,0 +1,13 @@
+# Normalise to LF in the repository. Everything here is built and run on Linux
+# — CI runners, the container image, the k3s node — so a CRLF that sneaks in
+# from a Windows checkout breaks shell scripts and Docker entrypoints in ways
+# that only show up after a deploy.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary
