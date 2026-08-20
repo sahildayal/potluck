@@ -6,6 +6,9 @@ import { auth } from './auth.js';
 import { loadEnv } from './env.js';
 import { sqlClient } from './db/client.js';
 import { withSession, type AppEnv } from './middleware/session.js';
+import { categoryRoutes } from './routes/categories.js';
+import { photoRoutes } from './routes/photos.js';
+import { recipeRoutes } from './routes/recipes.js';
 
 const env = loadEnv();
 
@@ -57,6 +60,10 @@ export function createApp(): Hono<AppEnv> {
     if (session === null || session === undefined) return c.json({ user: null });
     return c.json({ user: session.user });
   });
+
+  app.route('/api/recipes', recipeRoutes());
+  app.route('/api/categories', categoryRoutes());
+  app.route('/api/photos', photoRoutes());
 
   app.notFound((c) => c.json({ error: 'Not found' }, 404));
 

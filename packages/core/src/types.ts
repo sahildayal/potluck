@@ -13,7 +13,10 @@ export const sourceType = z.enum(['manual', 'website', 'photo', 'screenshot', 'v
 
 export const ingredientSchema = z.object({
   id: z.string().uuid().optional(),
-  position: z.number().int().min(0),
+  /** Derived from array order by the server. Accepted but never required —
+   *  a client-supplied index that disagrees with the order is a bug waiting
+   *  to happen, so order is the single source of truth. */
+  position: z.number().int().min(0).optional(),
   /** Exactly as the source wrote it. Never overwritten by parsing. */
   rawText: z.string().min(1).max(300),
   item: z.string().max(200).default(''),
@@ -25,7 +28,8 @@ export const ingredientSchema = z.object({
 
 export const stepSchema = z.object({
   id: z.string().uuid().optional(),
-  position: z.number().int().min(0),
+  /** Derived from array order by the server, as with ingredients. */
+  position: z.number().int().min(0).optional(),
   body: z.string().min(1).max(4000),
   /** Detected from the body at import time; null when no timer applies. */
   durationSeconds: z.number().int().positive().nullable().default(null),

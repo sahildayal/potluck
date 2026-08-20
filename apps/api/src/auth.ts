@@ -3,8 +3,10 @@ import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
+import { DEFAULT_CATEGORIES } from '@potluck/core';
 import { loadEnv, urlForRole } from './env.js';
-import { accounts, sessions, users, verifications } from './db/schema.js';
+import { asUser } from './db/client.js';
+import { accounts, categories, sessions, users, verifications } from './db/schema.js';
 
 const env = loadEnv();
 
@@ -72,6 +74,38 @@ export const auth = betterAuth({
   session: {
     expiresIn: 60 * 60 * 24 * 30,
     updateAge: 60 * 60 * 24,
+  },
+
+  databaseHooks: {
+    user: {
+      create: {
+        /**
+         * Seed the five default categories from the requirements doc.
+         *
+         * Runs through asUser as the new account itself, so the rows are
+         * created under the same RLS policies as everything else rather than
+         * through a privileged back door. A failure here is logged but does not
+         * fail the signup — an account with no categories is recoverable, an
+         * account that could not be created is not.
+         */
+        after: async (user) => {
+          try {
+            await asUser(user.id, async (tx) => {
+              await tx.insert(categories).values(
+                DEFAULT_CATEGORIES.map((name, position) => ({
+                  ownerId: user.id,
+                  name,
+                  position,
+                  isDefault: true,
+                })),
+              );
+            });
+          } catch (error) {
+            console.error('[auth] failed to seed default categories', error);
+          }
+        },
+      },
+    },
   },
 
   advanced: {
