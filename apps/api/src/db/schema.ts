@@ -3,6 +3,7 @@ import {
   customType,
   index,
   integer,
+  jsonb,
   pgTable,
   primaryKey,
   real,
@@ -375,3 +376,69 @@ export const importJobs = pgTable('import_jobs', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * The public recipe catalog.
+ *
+ * Unlike everything else in this schema there is no owner_id, because nobody
+ * owns these — they are a shared library every signed-in user can read and
+ * nobody can write through the application. The RLS policy is correspondingly
+ * inverted: SELECT is unconditionally true, and there is no INSERT, UPDATE or
+ * DELETE policy at all, so the seed pipeline (running as the migration role) is
+ * the only thing that can change it.
+ *
+ * Ingredients and steps are jsonb rather than child tables. They are read as a
+ * whole document and never queried by their parts, and one row per recipe keeps
+ * a 1,000+ row catalog to a single index scan instead of three joins.
+ */
+export const catalogRecipes = pgTable(
+  'catalog_recipes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    /** Stable, human-readable, and the dedup key for the generator. */
+    slug: text('slug').notNull(),
+    title: text('title').notNull(),
+    summary: text('summary').notNull().default(''),
+
+    cuisine: text('cuisine').notNull(),
+    mealType: text('meal_type').notNull(),
+    mainProtein: text('main_protein').notNull().default(''),
+    tags: text('tags').array().notNull().default([]),
+
+    servings: integer('servings').notNull().default(2),
+    totalMinutes: integer('total_minutes'),
+    difficulty: text('difficulty').notNull().default('easy'),
+
+    /**
+     * Per serving, and an ESTIMATE — produced by a language model, not a lab.
+     * Surfaced as "about 32 g" in the UI for that reason; good enough to sort
+     * and filter by, not good enough to build a diet on.
+     */
+    proteinGrams: real('protein_grams'),
+    calories: integer('calories'),
+
+    ingredients: jsonb('ingredients').notNull().default([]),
+    steps: jsonb('steps').notNull().default([]),
+
+    /**
+     * The ingredient lines flattened to plain text, purely so the search vector
+     * can index them. Postgres forbids subqueries inside a generated column, so
+     * reaching into the jsonb from the tsvector expression is not possible —
+     * denormalising it here is the honest fix rather than a trigger nobody
+     * remembers exists.
+     */
+    ingredientsText: text('ingredients_text').notNull().default(''),
+
+    /** Same reason as ingredients_text: array_to_string is STABLE, not
+     *  IMMUTABLE, so a generated column cannot flatten the tags array itself. */
+    tagsText: text('tags_text').notNull().default(''),
+
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('catalog_recipes_slug_key').on(t.slug),
+    index('catalog_recipes_meal_type_idx').on(t.mealType),
+    index('catalog_recipes_cuisine_idx').on(t.cuisine),
+    index('catalog_recipes_protein_idx').on(t.proteinGrams),
+  ],
+);

@@ -24,6 +24,11 @@ export async function runMigrations(connectionString: string): Promise<void> {
 
     const rls = await readFile(join(here, 'rls.sql'), 'utf8');
     await client.unsafe(rls);
+
+    // Must run after rls.sql: that file drops every policy in the schema before
+    // recreating its own, which would take the catalog's read policy with it.
+    const search = await readFile(join(here, 'search.sql'), 'utf8');
+    await client.unsafe(search);
   } finally {
     await client.end({ timeout: 5 });
   }

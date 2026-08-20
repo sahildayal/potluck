@@ -8,6 +8,7 @@ import { CookMode } from './screens/CookMode.tsx';
 import { You } from './screens/You.tsx';
 import { Favourites } from './screens/Favourites.tsx';
 import { Shopping } from './screens/Shopping.tsx';
+import { Browse, CatalogDetailScreen } from './screens/Browse.tsx';
 import { RecipeEditor } from './screens/RecipeEditor.tsx';
 
 export function App() {
@@ -32,6 +33,8 @@ export function App() {
       <Route path="/recipe/:id/edit">{(p) => <RecipeEditor user={user} id={p.id} />}</Route>
       <Route path="/recipe/:id/cook">{(p) => <CookMode id={p.id} user={user} />}</Route>
       <Route path="/recipe/:id">{(p) => <RecipeDetail id={p.id} user={user} />}</Route>
+      <Route path="/browse">{() => <Browse user={user} />}</Route>
+      <Route path="/browse/:slug">{(p) => <CatalogDetailScreen slug={p.slug} />}</Route>
       <Route path="/favourites">{() => <Favourites user={user} />}</Route>
       <Route path="/shopping">{() => <Shopping user={user} />}</Route>
       <Route path="/you">{() => <You user={user} />}</Route>

@@ -7,11 +7,16 @@ import { Link, useLocation } from 'wouter';
  * supermarket — precisely the case a bottom tab exists for. Adding a recipe is
  * a floating button rather than a tab: it is an action, not a place, and giving
  * it a tab would mean pretending you can be "in" it.
+ *
+ * Browse took the slot Favourites originally had. A catalog of a thousand-plus
+ * recipes is a destination people arrive at with no particular recipe in mind,
+ * which is what a tab is for; favourites are a filtered view of a collection
+ * you are already looking at, so they live as a toggle on the Mine screen.
  */
 
 const TABS = [
-  { href: '/', label: 'Recipes', icon: BookIcon },
-  { href: '/favourites', label: 'Favourites', icon: HeartIcon },
+  { href: '/', label: 'Mine', icon: BookIcon },
+  { href: '/browse', label: 'Browse', icon: SearchIcon },
   { href: '/shopping', label: 'Shopping', icon: BasketIcon },
   { href: '/you', label: 'You', icon: PersonIcon },
 ] as const;
@@ -68,10 +73,11 @@ function BookIcon({ className }: IconProps) {
   );
 }
 
-function HeartIcon({ className }: IconProps) {
+function SearchIcon({ className }: IconProps) {
   return (
     <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M12 20s-7-4.6-7-9.5A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 7 3.5C19 15.4 12 20 12 20Z" />
+      <circle cx="11" cy="11" r="6.5" />
+      <path d="m16 16 4.5 4.5" />
     </svg>
   );
 }

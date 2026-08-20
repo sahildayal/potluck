@@ -93,6 +93,43 @@ export interface ShoppingItem {
   checked: boolean;
 }
 
+export interface CatalogSummary {
+  id: string;
+  slug: string;
+  title: string;
+  summary: string;
+  cuisine: string;
+  mealType: string;
+  mainProtein: string;
+  tags: string[];
+  servings: number;
+  totalMinutes: number | null;
+  difficulty: string;
+  proteinGrams: number | null;
+  calories: number | null;
+}
+
+export interface CatalogDetail extends CatalogSummary {
+  ingredients: { rawText: string }[];
+  steps: { body: string; durationSeconds: number | null }[];
+}
+
+export interface CatalogFacets {
+  cuisines: { value: string; count: number }[];
+  meals: { value: string; count: number }[];
+  total: number;
+}
+
+export interface BrowseParams {
+  q?: string;
+  meal?: string;
+  cuisine?: string;
+  minProtein?: number;
+  sort?: 'relevance' | 'protein' | 'quick' | 'newest';
+  limit?: number;
+  offset?: number;
+}
+
 export const api = {
   me: () => request<{ user: SessionUser | null }>('/api/me'),
 
@@ -136,6 +173,26 @@ export const api = {
       }),
     fork: (id: string) =>
       request<{ recipe: RecipeDetail }>(`/api/recipes/${id}/fork`, { method: 'POST' }),
+  },
+
+  catalog: {
+    facets: () => request<CatalogFacets>('/api/catalog/facets'),
+    browse: (params: BrowseParams) => {
+      const search = new URLSearchParams();
+      for (const [key, value] of Object.entries(params)) {
+        if (value !== undefined && value !== '' && value !== null) search.set(key, String(value));
+      }
+      const qs = search.toString();
+      return request<{ recipes: CatalogSummary[]; total: number; limit: number; offset: number }>(
+        `/api/catalog${qs.length > 0 ? `?${qs}` : ''}`,
+      );
+    },
+    get: (slug: string) => request<{ recipe: CatalogDetail }>(`/api/catalog/${slug}`),
+    save: (slug: string) =>
+      request<{ recipe: { id: string; title: string } }>(`/api/catalog/${slug}/save`, {
+        method: 'POST',
+        body: '{}',
+      }),
   },
 
   shopping: {

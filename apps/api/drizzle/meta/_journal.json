@@ -15,6 +15,13 @@
       "when": 1787233695865,
       "tag": "0001_fantastic_patriot",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1787244527703,
+      "tag": "0002_friendly_maestro",
+      "breakpoints": true
     }
   ]
 }

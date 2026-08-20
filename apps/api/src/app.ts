@@ -10,6 +10,7 @@ import { categoryRoutes } from './routes/categories.js';
 import { photoRoutes } from './routes/photos.js';
 import { recipeRoutes } from './routes/recipes.js';
 import { shoppingRoutes } from './routes/shopping.js';
+import { catalogRoutes } from './routes/catalog.js';
 
 const env = loadEnv();
 
@@ -66,6 +67,7 @@ export function createApp(): Hono<AppEnv> {
   app.route('/api/categories', categoryRoutes());
   app.route('/api/photos', photoRoutes());
   app.route('/api/shopping', shoppingRoutes());
+  app.route('/api/catalog', catalogRoutes());
 
   app.notFound((c) => c.json({ error: 'Not found' }, 404));
 

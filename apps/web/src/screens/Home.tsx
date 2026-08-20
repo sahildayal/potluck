@@ -18,6 +18,7 @@ import { Chip } from '../components/Chip.tsx';
 export function Home({ user }: { user: SessionUser }) {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<string | null>(null);
+  const [favouritesOnly, setFavouritesOnly] = useState(false);
 
   const recipes = useQuery({ queryKey: ['recipes'], queryFn: api.recipes.list });
   const categories = useQuery({ queryKey: ['categories'], queryFn: api.categories.list });
@@ -31,12 +32,14 @@ export function Home({ user }: { user: SessionUser }) {
    */
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    if (needle.length === 0) return all;
-    return all.filter(
-      (r) =>
-        r.title.toLowerCase().includes(needle) || r.attributedTo.toLowerCase().includes(needle),
-    );
-  }, [all, query]);
+    return all.filter((r) => {
+      if (favouritesOnly && !r.isFavorite) return false;
+      if (needle.length === 0) return true;
+      return (
+        r.title.toLowerCase().includes(needle) || r.attributedTo.toLowerCase().includes(needle)
+      );
+    });
+  }, [all, query, favouritesOnly]);
 
   return (
     <div className="wash-lime safe-top min-h-dvh">
@@ -68,7 +71,19 @@ export function Home({ user }: { user: SessionUser }) {
 
         {(categories.data?.categories.length ?? 0) > 0 && (
           <div className="rail -mx-5 mt-4 flex gap-2 overflow-x-auto px-5 pb-1">
-            <CategoryChip label="All" active={category === null} onClick={() => setCategory(null)} />
+            <CategoryChip
+              label="All"
+              active={category === null && !favouritesOnly}
+              onClick={() => {
+                setCategory(null);
+                setFavouritesOnly(false);
+              }}
+            />
+            <CategoryChip
+              label="★ Favourites"
+              active={favouritesOnly}
+              onClick={() => setFavouritesOnly((v) => !v)}
+            />
             {categories.data?.categories.map((c) => (
               <CategoryChip
                 key={c.id}
@@ -79,6 +94,22 @@ export function Home({ user }: { user: SessionUser }) {
             ))}
           </div>
         )}
+
+        <Link
+          href="/browse"
+          className="mt-5 flex items-center gap-3 rounded-[var(--radius-card)] bg-mint p-4 text-mint-ink shadow-[var(--shadow-card)]"
+        >
+          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-surface">
+            <Doodle name="bowl" className="h-7 w-7 text-mint-ink" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-display text-lg leading-tight">Not sure what to cook?</span>
+            <span className="block text-sm opacity-80">
+              Browse a thousand-plus recipes and steal one
+            </span>
+          </span>
+          <span className="shrink-0 text-xl">&rarr;</span>
+        </Link>
 
         <p className="mt-6 mb-3 font-display text-xl">
           {filtered.length} {filtered.length === 1 ? 'recipe' : 'recipes'}
