@@ -1,5 +1,5 @@
 {
-  "id": "65d5d7b9-c70d-4b75-a97b-7844f524a565",
+  "id": "8b4951bf-a54c-418c-9e45-4d93ae14ec61",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -94,9 +94,22 @@
           "primaryKey": false,
           "notNull": true
         },
-        "r2_key": {
-          "name": "r2_key",
+        "bytes": {
+          "name": "bytes",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "content_type": {
+          "name": "content_type",
           "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'image/webp'"
+        },
+        "byte_size": {
+          "name": "byte_size",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true
         },
@@ -682,9 +695,22 @@
           "primaryKey": false,
           "notNull": true
         },
-        "r2_key": {
-          "name": "r2_key",
+        "bytes": {
+          "name": "bytes",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "content_type": {
+          "name": "content_type",
           "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'image/webp'"
+        },
+        "byte_size": {
+          "name": "byte_size",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true
         },
@@ -706,6 +732,13 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
         }
       },
       "indexes": {},

@@ -180,8 +180,8 @@ describe('sharing', () => {
 describe('attempts — "I made this"', () => {
   it('lets someone with access post an attempt on the recipe', async () => {
     const rows = await as(bob, (tx) => tx`
-      INSERT INTO attempts (recipe_id, owner_id, r2_key, caption)
-      VALUES (${aliceRecipe}, ${bob}, 'attempts/bob-1.jpg', 'mine collapsed')
+      INSERT INTO attempts (recipe_id, owner_id, bytes, byte_size, caption)
+      VALUES (${aliceRecipe}, ${bob}, '\x89504e47'::bytea, 4, 'mine collapsed')
       RETURNING id`);
     expect(rows).toHaveLength(1);
   });
@@ -189,8 +189,8 @@ describe('attempts — "I made this"', () => {
   it('refuses an attempt from someone who cannot see the recipe', async () => {
     await expect(
       as(carol, (tx) => tx`
-        INSERT INTO attempts (recipe_id, owner_id, r2_key)
-        VALUES (${aliceRecipe}, ${carol}, 'attempts/carol-1.jpg')`),
+        INSERT INTO attempts (recipe_id, owner_id, bytes, byte_size)
+        VALUES (${aliceRecipe}, ${carol}, '\x89504e47'::bytea, 4)`),
     ).rejects.toThrow();
   });
 

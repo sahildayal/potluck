@@ -1,5 +1,6 @@
 import {
   boolean,
+  customType,
   integer,
   pgTable,
   primaryKey,
@@ -10,6 +11,13 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
+
+/** Drizzle has no first-class bytea, so declare one that maps to Buffer. */
+const customBytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType() {
+    return 'bytea';
+  },
+});
 
 /**
  * Every table that holds user data carries an owner column, because that column
@@ -128,6 +136,20 @@ export const steps = pgTable('steps', {
   durationSeconds: integer('duration_seconds'),
 });
 
+/**
+ * Photo bytes live in Postgres rather than object storage.
+ *
+ * Not the textbook choice — but enabling Cloudflare R2 requires a card on file
+ * even inside its free allowance, and this project's hard constraint is that no
+ * card exists anywhere. Postgres large-object columns are a perfectly good
+ * answer at this scale: the client downscales to 1200px WebP before upload, so
+ * a photo is 80-150 KB, and Neon's free 0.5 GB holds a few thousand of them
+ * alongside the recipe text.
+ *
+ * `bytes` is deliberately isolated to these two tables so that swapping in S3,
+ * R2 or MinIO later means implementing one storage interface, not a migration
+ * of the whole schema.
+ */
 export const recipePhotos = pgTable('recipe_photos', {
   id: uuid('id').primaryKey().defaultRandom(),
   recipeId: uuid('recipe_id')
@@ -136,10 +158,13 @@ export const recipePhotos = pgTable('recipe_photos', {
   ownerId: uuid('owner_id')
     .notNull()
     .references(() => users.id, { onDelete: 'cascade' }),
-  r2Key: text('r2_key').notNull(),
+  bytes: customBytea('bytes').notNull(),
+  contentType: text('content_type').notNull().default('image/webp'),
+  byteSize: integer('byte_size').notNull(),
   width: integer('width'),
   height: integer('height'),
   isHero: boolean('is_hero').notNull().default(false),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const recipeCategories = pgTable(
@@ -208,7 +233,9 @@ export const attempts = pgTable('attempts', {
   ownerId: uuid('owner_id')
     .notNull()
     .references(() => users.id, { onDelete: 'cascade' }),
-  r2Key: text('r2_key').notNull(),
+  bytes: customBytea('bytes').notNull(),
+  contentType: text('content_type').notNull().default('image/webp'),
+  byteSize: integer('byte_size').notNull(),
   caption: text('caption').notNull().default(''),
   wentWell: boolean('went_well'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

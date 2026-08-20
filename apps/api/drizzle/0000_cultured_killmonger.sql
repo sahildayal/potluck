@@ -9,7 +9,9 @@ CREATE TABLE "attempts" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"recipe_id" uuid NOT NULL,
 	"owner_id" uuid NOT NULL,
-	"r2_key" text NOT NULL,
+	"bytes" "bytea" NOT NULL,
+	"content_type" text DEFAULT 'image/webp' NOT NULL,
+	"byte_size" integer NOT NULL,
 	"caption" text DEFAULT '' NOT NULL,
 	"went_well" boolean,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
@@ -77,10 +79,13 @@ CREATE TABLE "recipe_photos" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"recipe_id" uuid NOT NULL,
 	"owner_id" uuid NOT NULL,
-	"r2_key" text NOT NULL,
+	"bytes" "bytea" NOT NULL,
+	"content_type" text DEFAULT 'image/webp' NOT NULL,
+	"byte_size" integer NOT NULL,
 	"width" integer,
 	"height" integer,
-	"is_hero" boolean DEFAULT false NOT NULL
+	"is_hero" boolean DEFAULT false NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "recipe_shares" (
