@@ -226,6 +226,49 @@ export function canonicalise(raw: string): CanonicalQuantity {
   return { qty: parsed.value, unit: 'count', dimension: 'count' };
 }
 
+/**
+ * Canonicalises a measurement AND returns what is left of the line.
+ *
+ * The remainder is the ingredient name with the quantity and unit consumed, so
+ * the UI can show a scaled quantity next to "potatoes, cubed" rather than
+ * printing the number twice — once converted and once still inside the raw
+ * text. When nothing could be parsed, `item` is empty and the caller falls back
+ * to showing the source's own words.
+ */
+export function parseIngredient(raw: string): CanonicalQuantity & { item: string } {
+  const parsed = parseQuantity(raw);
+  if (parsed === null) {
+    return { qty: null, unit: null, dimension: 'none', item: '' };
+  }
+
+  const words = parsed.rest.split(/\s+/).filter((w) => w.length > 0);
+  for (const take of [2, 1]) {
+    if (words.length < take) continue;
+    const key = normaliseUnitToken(words.slice(0, take).join(' '));
+    if (key !== null) {
+      const def = UNITS[key] as UnitDef;
+      return {
+        qty: round(parsed.value * def.factor, 4),
+        unit: def.dimension === 'mass' ? 'g' : 'ml',
+        dimension: def.dimension,
+        item: cleanItem(words.slice(take).join(' ')),
+      };
+    }
+  }
+
+  return {
+    qty: parsed.value,
+    unit: 'count',
+    dimension: 'count',
+    item: cleanItem(parsed.rest),
+  };
+}
+
+/** Drops a leading "of" left behind by "2 cups of flour". */
+function cleanItem(text: string): string {
+  return text.replace(/^of\s+/i, '').trim();
+}
+
 function round(n: number, places: number): number {
   const f = 10 ** places;
   return Math.round(n * f) / f;
@@ -245,6 +288,12 @@ interface DisplayStep {
   min: number;
 }
 
+/**
+ * Spoons and cups are how people say small volumes in BOTH systems — a metric
+ * recipe says "1 tsp turmeric", never "4.93 ml turmeric". So the metric ladder
+ * drops to tbsp and tsp below the point where millilitres stop sounding like
+ * something a person would measure.
+ */
 const DISPLAY: Record<UnitSystem, Record<'mass' | 'volume', DisplayStep[]>> = {
   metric: {
     mass: [
@@ -253,7 +302,9 @@ const DISPLAY: Record<UnitSystem, Record<'mass' | 'volume', DisplayStep[]>> = {
     ],
     volume: [
       { unit: 'l', factor: 1000, min: 1000 },
-      { unit: 'ml', factor: 1, min: 0 },
+      { unit: 'ml', factor: 1, min: 50 },
+      { unit: 'tbsp', factor: 14.7868, min: 11 },
+      { unit: 'tsp', factor: 4.92892, min: 0 },
     ],
   },
   imperial: {
@@ -283,7 +334,7 @@ export function formatQuantity(
 ): { value: string; unit: string } | null {
   if (q.qty === null) return null;
   if (q.dimension === 'count') {
-    return { value: formatNumber(q.qty, system), unit: '' };
+    return { value: formatNumber(q.qty, ''), unit: '' };
   }
   if (q.dimension === 'none') return null;
 
@@ -291,16 +342,20 @@ export function formatQuantity(
   const step = steps.find((s) => q.qty !== null && q.qty >= s.min) ?? steps[steps.length - 1];
   if (step === undefined) return null;
 
-  return { value: formatNumber(q.qty / step.factor, system), unit: step.unit };
+  return { value: formatNumber(q.qty / step.factor, step.unit), unit: step.unit };
 }
 
 /**
- * Imperial cooks read "1 1/2" far more naturally than "1.5", so near-common
- * fractions are rendered as fractions there. Metric goes the other way — nobody
- * writes "1 1/2 kg" on a recipe card — so it stays decimal.
+ * Fractions belong to spoon-and-cup measures, decimals to weights and bulk
+ * volumes. That split follows how the units are actually spoken rather than
+ * which system they belong to: people say "1/2 tsp" and "1 1/2 cups", but
+ * "1.5 kg" and "250 ml" — and "1 1/2 kg" on a recipe card would look wrong in
+ * either system.
  */
-function formatNumber(n: number, system: UnitSystem): string {
-  if (system === 'metric') {
+const FRACTIONAL_UNITS = new Set(['tsp', 'tbsp', 'cup']);
+
+function formatNumber(n: number, unit: string): string {
+  if (!FRACTIONAL_UNITS.has(unit)) {
     return String(round(n, 2));
   }
   const whole = Math.floor(n);

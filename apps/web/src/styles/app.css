@@ -1,0 +1,174 @@
+@import 'tailwindcss';
+
+/* =========================================================================
+   Potluck — "Enamelware"
+   =========================================================================
+   The visual world is the speckled blue-and-white enamel pot: the one that
+   lives on the back of the stove, gets chipped, and outlives everything else
+   in the kitchen. Chip-white grounds, a muted enamel blue that never shouts,
+   a dark rim ink, and saffron held back for exactly two jobs — the favourite
+   star and a running timer — so that when you see it, it means something.
+
+   Deliberately not warm cream with a terracotta accent. That palette is both
+   the most common AI-generated default and one this project already rejected
+   once. Warmth here comes from saffron and from the slab serif, not paper.
+   ========================================================================= */
+
+:root {
+  --c-ground: #eff2f1;
+  --c-surface: #ffffff;
+  --c-raised: #e4e9e8;
+  --c-ink: #14212a;
+  --c-muted: #5a6b74;
+  --c-line: #d3dcdb;
+  --c-line-strong: #b6c3c2;
+
+  --c-enamel: #2b6079;
+  --c-enamel-ink: #ffffff;
+  --c-enamel-soft: #e1ebf0;
+
+  --c-saffron: #b87d09;
+  --c-saffron-soft: #faf0d9;
+
+  --c-chilli: #a8382a;
+  --c-chilli-soft: #f8e7e4;
+
+  --shadow-card: 0 1px 2px rgb(20 33 42 / 0.06), 0 1px 1px rgb(20 33 42 / 0.04);
+  --shadow-lift: 0 4px 16px rgb(20 33 42 / 0.1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --c-ground: #101a20;
+    --c-surface: #182530;
+    --c-raised: #1f2e39;
+    --c-ink: #e6edef;
+    --c-muted: #94a7b0;
+    --c-line: #26363f;
+    --c-line-strong: #3a4d58;
+
+    --c-enamel: #74b9d9;
+    --c-enamel-ink: #0b1419;
+    --c-enamel-soft: #162b36;
+
+    --c-saffron: #e5b342;
+    --c-saffron-soft: #2c2312;
+
+    --c-chilli: #e07a66;
+    --c-chilli-soft: #2e1a16;
+
+    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow-lift: 0 4px 18px rgb(0 0 0 / 0.5);
+  }
+}
+
+:root[data-theme='dark'] {
+  --c-ground: #101a20;
+  --c-surface: #182530;
+  --c-raised: #1f2e39;
+  --c-ink: #e6edef;
+  --c-muted: #94a7b0;
+  --c-line: #26363f;
+  --c-line-strong: #3a4d58;
+
+  --c-enamel: #74b9d9;
+  --c-enamel-ink: #0b1419;
+  --c-enamel-soft: #162b36;
+
+  --c-saffron: #e5b342;
+  --c-saffron-soft: #2c2312;
+
+  --c-chilli: #e07a66;
+  --c-chilli-soft: #2e1a16;
+
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-lift: 0 4px 18px rgb(0 0 0 / 0.5);
+}
+
+@theme inline {
+  --color-ground: var(--c-ground);
+  --color-surface: var(--c-surface);
+  --color-raised: var(--c-raised);
+  --color-ink: var(--c-ink);
+  --color-muted: var(--c-muted);
+  --color-line: var(--c-line);
+  --color-line-strong: var(--c-line-strong);
+  --color-enamel: var(--c-enamel);
+  --color-enamel-ink: var(--c-enamel-ink);
+  --color-enamel-soft: var(--c-enamel-soft);
+  --color-saffron: var(--c-saffron);
+  --color-saffron-soft: var(--c-saffron-soft);
+  --color-chilli: var(--c-chilli);
+  --color-chilli-soft: var(--c-chilli-soft);
+
+  --font-display: 'Zilla Slab', Georgia, 'Times New Roman', serif;
+  --font-body: 'Source Sans 3', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--c-ground);
+  color: var(--c-ink);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  /* Home-screen install: keep content clear of the notch and home indicator. */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+    env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+  text-wrap: balance;
+  margin: 0;
+}
+
+/* Quantities and timers line up in columns, so they get tabular figures. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Keyboard focus must stay obvious — this app gets used one-handed and by
+   people who are not looking directly at the screen. */
+:where(a, button, input, textarea, select, [tabindex]):focus-visible {
+  outline: 2px solid var(--c-enamel);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* The one texture in the palette: the speckle of enamelware. Used on exactly
+   one surface — the sign-in screen — so it reads as a material, not a pattern
+   library. */
+.speckled {
+  background-image:
+    radial-gradient(circle at 20% 30%, var(--c-line) 0.7px, transparent 0.8px),
+    radial-gradient(circle at 70% 60%, var(--c-line) 0.6px, transparent 0.7px),
+    radial-gradient(circle at 45% 85%, var(--c-line) 0.5px, transparent 0.6px);
+  background-size: 44px 44px, 62px 62px, 38px 38px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

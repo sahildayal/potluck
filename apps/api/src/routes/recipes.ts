@@ -1,8 +1,8 @@
 import { desc, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import {
-  canonicalise,
   createRecipeSchema,
+  parseIngredient,
   primaryDuration,
   updateRecipeSchema,
 } from '@potluck/core';
@@ -330,17 +330,19 @@ async function writeChildren(
   if (input.ingredients !== undefined && input.ingredients.length > 0) {
     await tx.insert(ingredients).values(
       input.ingredients.map((raw, index) => {
-        const canonical = canonicalise(raw.rawText);
+        const parsed = parseIngredient(raw.rawText);
         return {
           recipeId,
           ownerId,
           position: index,
           rawText: raw.rawText,
-          item: raw.item ?? '',
+          // Prefer an explicitly supplied item, else the name left over once the
+          // quantity and unit were consumed.
+          item: raw.item !== undefined && raw.item.length > 0 ? raw.item : parsed.item,
           note: raw.note ?? '',
-          qtyCanonical: canonical.qty,
-          unitCanonical: canonical.unit,
-          dimension: canonical.dimension,
+          qtyCanonical: parsed.qty,
+          unitCanonical: parsed.unit,
+          dimension: parsed.dimension,
         };
       }),
     );

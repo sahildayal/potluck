@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { canonicalise, formatQuantity, parseQuantity, scale } from './units.js';
+import {
+  canonicalise,
+  formatQuantity,
+  parseIngredient,
+  parseQuantity,
+  scale,
+} from './units.js';
 
 describe('parseQuantity', () => {
   it('reads plain numbers and decimals', () => {
@@ -103,6 +109,31 @@ describe('formatQuantity', () => {
     });
   });
 
+  it('uses spoons for small volumes in metric too, because cooks do', () => {
+    // "4.93 ml turmeric" is technically correct and useless to a person.
+    expect(formatQuantity({ qty: 4.92892, unit: 'ml', dimension: 'volume' }, 'metric')).toEqual({
+      value: '1',
+      unit: 'tsp',
+    });
+    expect(formatQuantity({ qty: 2.46446, unit: 'ml', dimension: 'volume' }, 'metric')).toEqual({
+      value: '1/2',
+      unit: 'tsp',
+    });
+    expect(formatQuantity({ qty: 29.5736, unit: 'ml', dimension: 'volume' }, 'metric')).toEqual({
+      value: '2',
+      unit: 'tbsp',
+    });
+  });
+
+  it('keeps weights and bulk volumes decimal in both systems', () => {
+    // Fractions follow the unit, not the system: nobody writes "1 1/2 kg".
+    expect(formatQuantity({ qty: 1500, unit: 'g', dimension: 'mass' }, 'imperial')?.unit).toBe('lb');
+    expect(formatQuantity({ qty: 250, unit: 'ml', dimension: 'volume' }, 'metric')).toEqual({
+      value: '250',
+      unit: 'ml',
+    });
+  });
+
   it('renders imperial volumes as cooks actually say them', () => {
     const half = formatQuantity({ qty: 118.294, unit: 'ml', dimension: 'volume' }, 'imperial');
     expect(half).toEqual({ value: '1/2', unit: 'cup' });
@@ -128,5 +159,39 @@ describe('formatQuantity', () => {
 
   it('returns null when there is nothing to render, so the UI shows raw text', () => {
     expect(formatQuantity({ qty: null, unit: null, dimension: 'none' }, 'metric')).toBeNull();
+  });
+});
+
+describe('parseIngredient', () => {
+  it('separates the quantity from the ingredient name', () => {
+    // Without this the UI prints the quantity twice: once converted, and once
+    // still sitting inside the raw text.
+    const result = parseIngredient('2 cups flour');
+    expect(result.qty).toBeCloseTo(473.18, 1);
+    expect(result.unit).toBe('ml');
+    expect(result.item).toBe('flour');
+  });
+
+  it('handles a count with no unit', () => {
+    const result = parseIngredient('2 medium potatoes, cubed');
+    expect(result.dimension).toBe('count');
+    expect(result.qty).toBe(2);
+    expect(result.item).toBe('medium potatoes, cubed');
+  });
+
+  it('drops a leading "of"', () => {
+    expect(parseIngredient('2 cups of milk').item).toBe('milk');
+  });
+
+  it('leaves item empty when nothing parses, so raw text is shown instead', () => {
+    const result = parseIngredient('a pinch of saffron');
+    expect(result.qty).toBeNull();
+    expect(result.item).toBe('');
+  });
+
+  it('handles fractions and abbreviations together', () => {
+    const result = parseIngredient('1/2 tsp turmeric');
+    expect(result.qty).toBeCloseTo(2.46, 1);
+    expect(result.item).toBe('turmeric');
   });
 });
