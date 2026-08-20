@@ -114,12 +114,20 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Scan image for known vulnerabilities
-        uses: aquasecurity/trivy-action@0.28.0
-        with:
-          input: /tmp/potluck-image.tar
-          severity: HIGH,CRITICAL
-          exit-code: "0"          # report, do not block; base-image CVEs are
-          format: table           # usually fixed by a rebuild, not by us
+        # Run Trivy from its own image rather than the marketplace action. The
+        # action's tags drift and a pinned one stopped resolving, which failed
+        # the build for a reason that had nothing to do with the code.
+        #
+        # Reports rather than blocks: base-image CVEs are usually fixed by
+        # rebuilding on a newer node:22-alpine, not by anything in this repo, and
+        # a hard gate here would block unrelated work on someone else's schedule.
+        run: >
+          docker run --rm -v /tmp:/tmp aquasec/trivy:latest image
+          --input /tmp/potluck-image.tar
+          --severity HIGH,CRITICAL
+          --exit-code 0
+          --format table
+          --no-progress
 
       - uses: actions/upload-artifact@v4
         with:
