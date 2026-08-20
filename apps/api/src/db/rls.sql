@@ -1,0 +1,289 @@
+-- =============================================================================
+-- Row-Level Security
+-- =============================================================================
+-- This file is the security spine of Potluck. Every authorization rule that
+-- matters is expressed here, evaluated by Postgres itself, so a mistake in an
+-- API handler cannot leak one user's recipes to another.
+--
+-- Two things make that guarantee real:
+--
+--   1. FORCE ROW LEVEL SECURITY — without it, policies are skipped for the
+--      table's owner, and on a managed Postgres the app often connects as the
+--      owner. FORCE closes that hole.
+--   2. The app connects as `potluck_app`, a role with no BYPASSRLS attribute
+--      and no table ownership. It cannot opt out even if it wanted to.
+--
+-- Identity is carried per-transaction via `SET LOCAL app.user_id`. Every
+-- policy reads it through current_app_user(). A connection that forgets to set
+-- it sees nothing at all, which is the correct failure direction.
+-- =============================================================================
+
+-- ---------------------------------------------------------------------------
+-- Identity helper
+-- ---------------------------------------------------------------------------
+-- Returns NULL rather than raising when unset, so an un-scoped connection gets
+-- an empty result set instead of an error that might get caught and ignored.
+CREATE OR REPLACE FUNCTION current_app_user() RETURNS uuid
+LANGUAGE sql STABLE AS $$
+  SELECT NULLIF(current_setting('app.user_id', true), '')::uuid;
+$$;
+
+-- Is a recipe visible to the current user? Owned, or shared and not revoked.
+CREATE OR REPLACE FUNCTION can_read_recipe(target_recipe uuid) RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM recipes r
+    WHERE r.id = target_recipe
+      AND r.owner_id = current_app_user()
+  ) OR EXISTS (
+    SELECT 1 FROM recipe_shares s
+    WHERE s.recipe_id = target_recipe
+      AND s.recipient_id = current_app_user()
+      AND s.revoked_at IS NULL
+  );
+$$;
+
+-- ---------------------------------------------------------------------------
+-- Application role
+-- ---------------------------------------------------------------------------
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'potluck_app') THEN
+    CREATE ROLE potluck_app NOLOGIN NOBYPASSRLS;
+  END IF;
+END
+$$;
+
+GRANT USAGE ON SCHEMA public TO potluck_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO potluck_app;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO potluck_app;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO potluck_app;
+
+-- The app must never read invite codes directly; redemption goes through a
+-- SECURITY DEFINER function so a code can be validated without the caller
+-- being able to enumerate the table.
+REVOKE ALL ON invite_codes FROM potluck_app;
+
+-- ---------------------------------------------------------------------------
+-- Enable + force RLS everywhere
+-- ---------------------------------------------------------------------------
+DO $$
+DECLARE t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY[
+    'users', 'categories', 'recipes', 'ingredients', 'steps', 'recipe_photos',
+    'recipe_categories', 'friendships', 'recipe_shares', 'attempts',
+    'attempt_hides', 'shopping_items', 'import_jobs', 'invite_codes'
+  ] LOOP
+    EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
+    EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
+  END LOOP;
+END
+$$;
+
+-- ---------------------------------------------------------------------------
+-- users
+-- ---------------------------------------------------------------------------
+-- You can see yourself, anyone you are accepted friends with, and anyone who
+-- has shared a recipe with you (so their name renders on the shared card).
+CREATE POLICY users_read ON users FOR SELECT USING (
+  id = current_app_user()
+  OR EXISTS (
+    SELECT 1 FROM friendships f
+    WHERE f.status = 'accepted'
+      AND ((f.requester_id = current_app_user() AND f.addressee_id = users.id)
+        OR (f.addressee_id = current_app_user() AND f.requester_id = users.id))
+  )
+  OR EXISTS (
+    SELECT 1 FROM recipe_shares s
+    WHERE s.revoked_at IS NULL
+      AND ((s.owner_id = users.id AND s.recipient_id = current_app_user())
+        OR (s.recipient_id = users.id AND s.owner_id = current_app_user()))
+  )
+);
+
+CREATE POLICY users_update_self ON users FOR UPDATE
+  USING (id = current_app_user())
+  WITH CHECK (id = current_app_user());
+
+-- ---------------------------------------------------------------------------
+-- Owner-only tables
+-- ---------------------------------------------------------------------------
+-- categories, recipe_categories, shopping_items and import_jobs are private
+-- with no sharing semantics at all, so one symmetrical policy covers each.
+DO $$
+DECLARE t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['categories', 'recipe_categories', 'shopping_items', 'import_jobs'] LOOP
+    EXECUTE format(
+      'CREATE POLICY %I ON %I FOR ALL USING (owner_id = current_app_user())
+         WITH CHECK (owner_id = current_app_user())',
+      t || '_owner', t
+    );
+  END LOOP;
+END
+$$;
+
+-- ---------------------------------------------------------------------------
+-- recipes
+-- ---------------------------------------------------------------------------
+-- Read is owner-or-shared. Writes are owner-only: sharing a recipe never grants
+-- edit rights on it. If a friend wants to change something, they fork it.
+CREATE POLICY recipes_read ON recipes FOR SELECT USING (
+  owner_id = current_app_user()
+  OR EXISTS (
+    SELECT 1 FROM recipe_shares s
+    WHERE s.recipe_id = recipes.id
+      AND s.recipient_id = current_app_user()
+      AND s.revoked_at IS NULL
+  )
+);
+
+CREATE POLICY recipes_insert ON recipes FOR INSERT
+  WITH CHECK (owner_id = current_app_user());
+
+CREATE POLICY recipes_update ON recipes FOR UPDATE
+  USING (owner_id = current_app_user())
+  WITH CHECK (owner_id = current_app_user());
+
+CREATE POLICY recipes_delete ON recipes FOR DELETE
+  USING (owner_id = current_app_user());
+
+-- ---------------------------------------------------------------------------
+-- Recipe children: ingredients, steps, photos
+-- ---------------------------------------------------------------------------
+-- Visible whenever the parent recipe is; writable only by the recipe's owner.
+DO $$
+DECLARE t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['ingredients', 'steps', 'recipe_photos'] LOOP
+    EXECUTE format(
+      'CREATE POLICY %I ON %I FOR SELECT USING (
+         owner_id = current_app_user() OR can_read_recipe(recipe_id))',
+      t || '_read', t
+    );
+    EXECUTE format(
+      'CREATE POLICY %I ON %I FOR INSERT WITH CHECK (owner_id = current_app_user())',
+      t || '_insert', t
+    );
+    EXECUTE format(
+      'CREATE POLICY %I ON %I FOR UPDATE USING (owner_id = current_app_user())
+         WITH CHECK (owner_id = current_app_user())',
+      t || '_update', t
+    );
+    EXECUTE format(
+      'CREATE POLICY %I ON %I FOR DELETE USING (owner_id = current_app_user())',
+      t || '_delete', t
+    );
+  END LOOP;
+END
+$$;
+
+-- ---------------------------------------------------------------------------
+-- friendships
+-- ---------------------------------------------------------------------------
+-- Either party can see the row. Only the requester creates it, and only the
+-- addressee can accept it — which is why the UPDATE policy is asymmetric.
+CREATE POLICY friendships_read ON friendships FOR SELECT USING (
+  requester_id = current_app_user() OR addressee_id = current_app_user()
+);
+
+CREATE POLICY friendships_insert ON friendships FOR INSERT
+  WITH CHECK (requester_id = current_app_user() AND addressee_id <> current_app_user());
+
+CREATE POLICY friendships_update ON friendships FOR UPDATE
+  USING (addressee_id = current_app_user())
+  WITH CHECK (addressee_id = current_app_user());
+
+CREATE POLICY friendships_delete ON friendships FOR DELETE USING (
+  requester_id = current_app_user() OR addressee_id = current_app_user()
+);
+
+-- ---------------------------------------------------------------------------
+-- recipe_shares
+-- ---------------------------------------------------------------------------
+-- Both sides see the share. Only the owner creates or revokes it, and only for
+-- recipes they actually own — checked here rather than trusted from the API.
+CREATE POLICY shares_read ON recipe_shares FOR SELECT USING (
+  owner_id = current_app_user() OR recipient_id = current_app_user()
+);
+
+CREATE POLICY shares_insert ON recipe_shares FOR INSERT WITH CHECK (
+  owner_id = current_app_user()
+  AND EXISTS (
+    SELECT 1 FROM recipes r WHERE r.id = recipe_id AND r.owner_id = current_app_user()
+  )
+);
+
+CREATE POLICY shares_update ON recipe_shares FOR UPDATE
+  USING (owner_id = current_app_user())
+  WITH CHECK (owner_id = current_app_user());
+
+CREATE POLICY shares_delete ON recipe_shares FOR DELETE
+  USING (owner_id = current_app_user());
+
+-- ---------------------------------------------------------------------------
+-- attempts  ("I made this")
+-- ---------------------------------------------------------------------------
+-- Anyone who can see the recipe can see its attempts and post their own.
+-- Only the cook can edit or delete theirs.
+CREATE POLICY attempts_read ON attempts FOR SELECT USING (
+  owner_id = current_app_user() OR can_read_recipe(recipe_id)
+);
+
+CREATE POLICY attempts_insert ON attempts FOR INSERT WITH CHECK (
+  owner_id = current_app_user() AND can_read_recipe(recipe_id)
+);
+
+CREATE POLICY attempts_update ON attempts FOR UPDATE
+  USING (owner_id = current_app_user())
+  WITH CHECK (owner_id = current_app_user());
+
+CREATE POLICY attempts_delete ON attempts FOR DELETE
+  USING (owner_id = current_app_user());
+
+-- The recipe owner may hide an attempt from their page, but only on a recipe
+-- they own — and hiding never touches the cook's row.
+CREATE POLICY attempt_hides_all ON attempt_hides FOR ALL
+  USING (owner_id = current_app_user())
+  WITH CHECK (
+    owner_id = current_app_user()
+    AND EXISTS (
+      SELECT 1 FROM attempts a
+      JOIN recipes r ON r.id = a.recipe_id
+      WHERE a.id = attempt_id AND r.owner_id = current_app_user()
+    )
+  );
+
+-- ---------------------------------------------------------------------------
+-- invite_codes
+-- ---------------------------------------------------------------------------
+-- You can see codes you created, so the UI can show which are still unused.
+-- Nobody can read the table looking for a valid code to redeem.
+CREATE POLICY invite_codes_own ON invite_codes FOR SELECT
+  USING (created_by = current_app_user());
+
+CREATE POLICY invite_codes_insert ON invite_codes FOR INSERT
+  WITH CHECK (created_by = current_app_user());
+
+-- Redemption runs with the function owner's rights, atomically, and reveals
+-- nothing beyond whether it worked.
+CREATE OR REPLACE FUNCTION redeem_invite(p_code text, p_user uuid) RETURNS boolean
+LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE affected int;
+BEGIN
+  UPDATE invite_codes
+     SET redeemed_by = p_user, redeemed_at = now()
+   WHERE code = p_code
+     AND redeemed_by IS NULL
+     AND (expires_at IS NULL OR expires_at > now());
+  GET DIAGNOSTICS affected = ROW_COUNT;
+  RETURN affected = 1;
+END
+$$;
+
+REVOKE ALL ON FUNCTION redeem_invite(text, uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION redeem_invite(text, uuid) TO potluck_app;
+GRANT EXECUTE ON FUNCTION current_app_user() TO potluck_app;
+GRANT EXECUTE ON FUNCTION can_read_recipe(uuid) TO potluck_app;

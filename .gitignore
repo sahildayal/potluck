@@ -1,0 +1,31 @@
+node_modules/
+dist/
+build/
+.turbo/
+coverage/
+*.tsbuildinfo
+
+# env / secrets — nothing here should ever be committed
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+kubeconfig
+kubeconfig.yaml
+
+# terraform
+infra/.terraform/
+infra/*.tfstate
+infra/*.tfstate.*
+infra/*.tfvars
+!infra/*.tfvars.example
+infra/.terraform.lock.hcl
+
+# local tooling
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+playwright-report/
+test-results/

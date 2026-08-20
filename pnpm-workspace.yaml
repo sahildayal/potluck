@@ -1,0 +1,22 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+
+# pnpm 11 blocks dependency build scripts by default and reads its settings from
+# this file — the "pnpm" key in package.json is no longer read.
+#
+# esbuild and @tailwindcss/oxide ship native binaries that a postinstall script
+# fetches. argon2 compiles a native addon for password hashing. Without these
+# entries the install "succeeds" and the packages are quietly broken at runtime.
+allowBuilds:
+  esbuild: true
+  '@tailwindcss/oxide': true
+  argon2: true
+
+  # Testcontainers pulls these in. ssh2 and protobufjs need their build steps;
+  # cpu-features is an optional native accelerator for ssh2 that needs a C++
+  # toolchain to compile and is not present on this machine — ssh2 falls back to
+  # pure JS without it, so it stays off rather than failing every install.
+  ssh2: true
+  protobufjs: true
+  cpu-features: false
