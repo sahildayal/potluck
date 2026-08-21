@@ -45,8 +45,13 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     // No mail provider on a zero-cost stack, so there is nowhere to send a
-    // verification link. Signup is invite-gated instead, which is a stronger
-    // control than an unverified email address anyway.
+    // verification link.
+    //
+    // This used to claim invite gating made up for that. It does not, because
+    // the gate is not wired in: invite_codes and redeem_invite() exist and are
+    // tested, but nothing in this signup path calls them. Signup is open to
+    // anyone with the URL, which is a deliberate trade for an unlisted link and
+    // a friend group, and has to change before the link is posted publicly.
     requireEmailVerification: false,
     minPasswordLength: 10,
   },

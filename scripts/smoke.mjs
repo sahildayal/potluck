@@ -180,6 +180,48 @@ async function main() {
   const anonymous = await fetch(`${base}/api/recipes`);
   check('anonymous request is rejected', anonymous.status === 401, `status ${anonymous.status}`);
 
+  // Photo upload, and specifically the hero id reaching the *list* endpoint.
+  //
+  // This is a regression test for a correlated-subquery bug that produced no
+  // error and no warning: the hero lookup interpolated a bare "id", which
+  // Postgres resolved against recipe_photos rather than the outer recipes row,
+  // so the comparison was rp.recipe_id = rp.id and heroPhotoId was always null.
+  // The recipe detail endpoint was unaffected, so only a card on the list
+  // screen showed the fault — as a missing photo, which looks like a styling
+  // problem rather than a broken query.
+  const onePixelPng = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+    'base64',
+  );
+  // init.headers is spread last in makeClient, so this overrides its JSON default.
+  const upload = await alice(`/api/photos/recipes/${recipe.id}?width=1&height=1`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'image/png' },
+    body: onePixelPng,
+  });
+  const uploaded = upload.body;
+  check('owner can upload a photo', upload.status === 201, `status ${upload.status}`);
+  check('first photo becomes the hero', uploaded?.isHero === true);
+
+  const withPhoto = await alice('/api/recipes');
+  const listed = withPhoto.body?.recipes?.find((r) => r.id === recipe.id);
+  check(
+    'hero photo id reaches the recipe list',
+    listed?.heroPhotoId === uploaded?.id,
+    `list gave ${String(listed?.heroPhotoId)}, upload gave ${String(uploaded?.id)}`,
+  );
+
+  const strangerUpload = await bob(`/api/photos/recipes/${recipe.id}?width=1&height=1`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'image/png' },
+    body: onePixelPng,
+  });
+  check(
+    'stranger cannot attach a photo to a recipe they do not own',
+    strangerUpload.status === 404,
+    `status ${strangerUpload.status}`,
+  );
+
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed === 0 ? 0 : 1);
 }

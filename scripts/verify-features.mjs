@@ -2,9 +2,11 @@
 /**
  * End-to-end check of the social, import and category features.
  *
- * Drives two real accounts through the API the way the app does, because these
+ * Drives three real accounts through the API the way the app does, because these
  * features are mostly about what one account can and cannot see of another's —
- * which is exactly the thing a single-user test cannot catch.
+ * which is exactly the thing a single-user test cannot catch. The third account
+ * is not padding: two accounts can only show that sharing works, never that it
+ * stays contained, and a bystander seeing nothing is the actual guarantee.
  *
  * Usage: node scripts/verify-features.mjs [base] [origin]
  */

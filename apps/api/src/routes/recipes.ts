@@ -1,4 +1,5 @@
 import { desc, eq, sql as sqlRaw } from 'drizzle-orm';
+
 import { Hono } from 'hono';
 import {
   createRecipeSchema,
@@ -15,6 +16,16 @@ import {
   steps,
 } from '../db/schema.js';
 import { currentUserId, requireUser, type AppEnv } from '../middleware/session.js';
+
+/**
+ * The outer recipe's id, fully qualified, for use inside correlated subqueries.
+ *
+ * `sqlRaw` interpolation of a column object renders a bare `"id"`, which a
+ * subquery resolves against its own table before looking outward. Writing the
+ * qualified name explicitly keeps the correlation pointing where it reads as
+ * though it points.
+ */
+const OUTER_RECIPE_ID = sqlRaw.raw('"recipes"."id"');
 
 /**
  * Recipe routes.
@@ -72,16 +83,25 @@ export function recipeRoutes(): Hono<AppEnv> {
         .select({
           // Aggregated rather than joined: a join would multiply a recipe by its
           // categories and the list would show duplicates.
+          //
+          // OUTER is the fully-qualified "recipes"."id". Interpolating the
+          // column object instead renders a bare "id", and inside a correlated
+          // subquery Postgres resolves a bare name against the *inner* table
+          // first. recipe_categories has no id column so it fell through to the
+          // outer query and worked by luck; recipe_photos has one, so the hero
+          // lookup silently became `rp.recipe_id = rp.id` — never true, always
+          // null, no error. Both are qualified now so neither depends on which
+          // columns the inner table happens to have.
           categoryIds: sqlRaw<string[]>`coalesce(array(
             SELECT rc.category_id::text FROM recipe_categories rc
-             WHERE rc.recipe_id = ${recipes.id}
+             WHERE rc.recipe_id = ${OUTER_RECIPE_ID}
           ), '{}')`,
           // A scalar subquery rather than a join, for the same reason as
           // categoryIds above: a card only ever needs one photo id, and a join
           // would multiply the recipe row by however many photos it has.
           heroPhotoId: sqlRaw<string | null>`(
             SELECT rp.id FROM recipe_photos rp
-             WHERE rp.recipe_id = ${recipes.id} AND rp.is_hero
+             WHERE rp.recipe_id = ${OUTER_RECIPE_ID} AND rp.is_hero
              LIMIT 1
           )`,
           id: recipes.id,

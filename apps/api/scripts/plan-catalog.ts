@@ -35,17 +35,29 @@ async function main(): Promise<void> {
   const rows = await sql<{ cuisine: string; meal_type: string; main_protein: string }[]>`
     SELECT cuisine, meal_type, main_protein FROM catalog_recipes`;
 
-  // Skipping combinations already in the catalog is cheaper than generating a
-  // near-duplicate and discovering the collision at insert time.
+  // Combinations already in the catalog are *deprioritised*, not excluded.
+  //
+  // Excluding them outright was the first attempt and it silently capped the
+  // catalog: the table records cuisine, meal and protein but not technique, so
+  // dropping every covered triple also threw away Korean/dinner/tofu as a
+  // stir-fry merely because a slow braise already existed. Those are different
+  // dishes. With 500 recipes in the table the survivors ran out at 466 cells,
+  // several hundred short of the target, and the shortfall looked like the
+  // taxonomy being exhausted rather than the filter being wrong.
+  //
+  // So: uncovered triples first, because they add the most variety, then the
+  // covered ones to fill the remainder. buildPlan already dedupes on the full
+  // four-part cell, and the slug unique index catches anything that still
+  // lands on the same title.
   const covered = new Set(rows.map((r) => `${r.cuisine}|${r.meal_type}|${r.main_protein}`));
 
-  // Over-plan deliberately: some cells will be pruned as already covered, and
-  // some generated titles will collide on slug regardless.
-  const plan = buildPlan(Math.ceil(total * 1.4), 20260821).filter(
-    (c) => !covered.has(`${c.cuisine}|${c.mealType}|${c.protein}`),
-  );
+  const plan = buildPlan(Math.ceil(total * 2.5), 20260821);
+  const fresh = plan.filter((c) => !covered.has(`${c.cuisine}|${c.mealType}|${c.protein}`));
+  const rest = plan.filter((c) => covered.has(`${c.cuisine}|${c.mealType}|${c.protein}`));
 
-  const wanted = plan.slice(0, total);
+  console.log(`${fresh.length} cells on uncovered combinations, ${rest.length} on covered ones`);
+
+  const wanted = [...fresh, ...rest].slice(0, total);
   const perSlice = Math.ceil(wanted.length / slices);
 
   console.log(`${rows.length} recipes already in the catalog`);
