@@ -229,14 +229,58 @@ export function buildPlan(count: number, seed = 20260820): Cell[] {
  * because to_tsvector treats them as different characters.
  */
 export function normaliseText(text: string): string {
-  return text
-    .replace(/[‐-―−]/g, '-')
-    .replace(/[‘’ʼ]/g, "'")
-    .replace(/[“”]/g, '"')
-    .replace(/…/g, '...')
-    .replace(/ /g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  return (
+    repairMojibake(text)
+      .replace(/[‐-―−]/g, '-')
+      .replace(/[‘’ʼ]/g, "'")
+      .replace(/[“”]/g, '"')
+      .replace(/…/g, '...')
+      // Vulgar fractions render inconsistently and, worse, never match a typed
+      // "1/2" in either the tsvector or the trigram index.
+      .replace(/½/g, '1/2')
+      .replace(/¼/g, '1/4')
+      .replace(/¾/g, '3/4')
+      .replace(/⅓/g, '1/3')
+      .replace(/⅔/g, '2/3')
+      .replace(/⅛/g, '1/8')
+      .replace(/ /g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+  );
+}
+
+/**
+ * Undoes UTF-8 bytes that were decoded as Latin-1 somewhere upstream, which is
+ * what turns "jalapeno" with a tilde into "jalapeAo" with debris in front.
+ *
+ * Only the sequences that can actually arise that way are rewritten, and only
+ * where the result is a character that plausibly belongs in a recipe. A blanket
+ * re-decode would corrupt text that was already correct, which is the usual way
+ * a mojibake fix ends up worse than the problem.
+ */
+const MOJIBAKE: [RegExp, string][] = [
+  [/Ã±/g, 'ñ'],
+  [/Ã¡/g, 'á'],
+  [/Ã©/g, 'é'],
+  [/Ã­/g, 'í'],
+  [/Ã³/g, 'ó'],
+  [/Ãº/g, 'ú'],
+  [/Ã¨/g, 'è'],
+  [/Ã§/g, 'ç'],
+  [/Ã¼/g, 'ü'],
+  [/Ã¶/g, 'ö'],
+  [/Ã¤/g, 'ä'],
+  [/Ã®/g, 'î'],
+  [/Ã«/g, 'ë'],
+  [/Ã´/g, 'ô'],
+  [/â€™/g, "'"],
+  [/â€“/g, '-'],
+];
+
+export function repairMojibake(text: string): string {
+  let out = text;
+  for (const [pattern, replacement] of MOJIBAKE) out = out.replace(pattern, replacement);
+  return out;
 }
 
 export function slugify(title: string): string {
