@@ -1,5 +1,6 @@
 import { Link } from 'wouter';
 import type { RecipeSummary } from '../lib/api.ts';
+import { usePhotoUrl } from '../lib/usePhotoUrl.ts';
 import { Chip, type ChipTone } from './Chip.tsx';
 import { Doodle, doodleFor } from './Doodle.tsx';
 
@@ -30,14 +31,9 @@ const BLOCK: Record<string, string> = {
   lime: 'bg-lime text-lime-ink',
 };
 
-export function RecipeCard({
-  recipe,
-  photoUrl,
-}: {
-  recipe: RecipeSummary;
-  photoUrl?: string | undefined;
-}) {
+export function RecipeCard({ recipe }: { recipe: RecipeSummary }) {
   const tone = toneFor(recipe.id);
+  const photoUrl = usePhotoUrl(recipe.heroPhotoId !== null ? `/api/photos/${recipe.heroPhotoId}` : null);
 
   return (
     <Link

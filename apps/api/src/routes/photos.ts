@@ -82,12 +82,28 @@ export function photoRoutes(): Hono<AppEnv> {
       );
     }
 
+    // Query params rather than a JSON body, because the body is already spoken
+    // for by the raw bytes. Absent or nonsense values are stored as null rather
+    // than rejected — the client always sends them, but a photo missing its
+    // dimensions is still a perfectly good photo.
+    const width = positiveInt(c.req.query('width'));
+    const height = positiveInt(c.req.query('height'));
+
     const userId = currentUserId(c);
     const recipeId = c.req.param('recipeId');
 
     const created = await asUser(userId, async (tx) => {
       // The insert is blocked by RLS if the recipe is not theirs, so there is no
       // separate ownership check to forget here.
+      //
+      // Whichever photo lands first becomes the hero automatically, so a recipe
+      // never sits with a picture attached and the doodle still showing.
+      const existing = await tx
+        .select({ id: recipePhotos.id })
+        .from(recipePhotos)
+        .where(eq(recipePhotos.recipeId, recipeId))
+        .limit(1);
+
       const rows = await tx
         .insert(recipePhotos)
         .values({
@@ -96,13 +112,52 @@ export function photoRoutes(): Hono<AppEnv> {
           bytes: buffer,
           contentType,
           byteSize: buffer.byteLength,
+          width,
+          height,
+          isHero: existing.length === 0,
         })
-        .returning({ id: recipePhotos.id });
+        .returning({ id: recipePhotos.id, isHero: recipePhotos.isHero });
       return rows[0];
     }).catch(() => undefined);
 
     if (created === undefined) return c.json({ error: 'Not found' }, 404);
-    return c.json({ id: created.id, url: `/api/photos/${created.id}` }, 201);
+    return c.json(
+      { id: created.id, url: `/api/photos/${created.id}`, isHero: created.isHero },
+      201,
+    );
+  });
+
+  /**
+   * Hero selection is exclusive: a recipe has at most one. Both writes happen
+   * inside the one asUser transaction so a reader never observes a moment with
+   * zero heroes or two.
+   */
+  app.post('/:id/hero', async (c) => {
+    const id = c.req.param('id');
+
+    const result = await asUser(currentUserId(c), async (tx) => {
+      const [photo] = await tx
+        .select({ recipeId: recipePhotos.recipeId })
+        .from(recipePhotos)
+        .where(eq(recipePhotos.id, id))
+        .limit(1);
+      if (photo === undefined) return null;
+
+      await tx
+        .update(recipePhotos)
+        .set({ isHero: false })
+        .where(eq(recipePhotos.recipeId, photo.recipeId));
+
+      const rows = await tx
+        .update(recipePhotos)
+        .set({ isHero: true })
+        .where(eq(recipePhotos.id, id))
+        .returning({ id: recipePhotos.id, isHero: recipePhotos.isHero });
+      return rows[0] ?? null;
+    });
+
+    if (result === null || result === undefined) return c.json({ error: 'Not found' }, 404);
+    return c.json(result);
   });
 
   app.delete('/:id', async (c) => {
@@ -117,4 +172,11 @@ export function photoRoutes(): Hono<AppEnv> {
   });
 
   return app;
+}
+
+/** A dimension query param that is missing or garbage becomes null, not 400. */
+function positiveInt(raw: string | undefined): number | null {
+  if (raw === undefined) return null;
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0 ? n : null;
 }

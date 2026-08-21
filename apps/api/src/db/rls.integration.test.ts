@@ -211,6 +211,34 @@ describe('attempts — "I made this"', () => {
   });
 });
 
+describe('recipe photos', () => {
+  it('lets the owner attach a photo to their own recipe', async () => {
+    const rows = await as(alice, (tx) => tx`
+      INSERT INTO recipe_photos (recipe_id, owner_id, bytes, byte_size)
+      VALUES (${aliceRecipe}, ${alice}, '\x89504e47'::bytea, 4)
+      RETURNING id`);
+    expect(rows).toHaveLength(1);
+  });
+
+  it('stops someone who can only read the recipe from attaching a photo to it', async () => {
+    // Bob has a live share on aliceRecipe from the sharing tests above, so he
+    // can read it — reading must not be enough to write a photo onto it.
+    await expect(
+      as(bob, (tx) => tx`
+        INSERT INTO recipe_photos (recipe_id, owner_id, bytes, byte_size)
+        VALUES (${aliceRecipe}, ${bob}, '\x89504e47'::bytea, 4)`),
+    ).rejects.toThrow();
+  });
+
+  it('stops a forged recipe_id the caller has no relationship to at all', async () => {
+    await expect(
+      as(carol, (tx) => tx`
+        INSERT INTO recipe_photos (recipe_id, owner_id, bytes, byte_size)
+        VALUES (${aliceRecipe}, ${carol}, '\x89504e47'::bytea, 4)`),
+    ).rejects.toThrow();
+  });
+});
+
 describe('invite codes', () => {
   it('does not let the application role read the invite table at all', async () => {
     await expect(as(bob, (tx) => tx`SELECT * FROM invite_codes`)).rejects.toThrow();

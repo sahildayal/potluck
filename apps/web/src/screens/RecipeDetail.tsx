@@ -2,7 +2,9 @@ import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useLocation } from 'wouter';
 import { formatQuantity, scale, type UnitSystem } from '@potluck/core';
-import { api, mediaUrl, type SessionUser } from '../lib/api.ts';
+import { api, ApiError, type PhotoSummary, type SessionUser } from '../lib/api.ts';
+import { encodeForUpload, formatBytes } from '../lib/downscale.ts';
+import { usePhotoUrl } from '../lib/usePhotoUrl.ts';
 import { Chip } from '../components/Chip.tsx';
 import { Doodle, doodleFor } from '../components/Doodle.tsx';
 import { Attempts } from '../components/Attempts.tsx';
@@ -111,15 +113,7 @@ export function RecipeDetail({ id, user }: { id: string; user: SessionUser }) {
           </div>
         </nav>
 
-        <div className="overflow-hidden rounded-[var(--radius-card)] bg-peach text-peach-ink">
-          {hero !== undefined ? (
-            <img src={mediaUrl(hero.url)} alt="" className="h-52 w-full object-cover" />
-          ) : (
-            <div className="grid h-40 place-items-center">
-              <Doodle name={doodleFor(recipe.id)} className="h-24 w-24 opacity-90" />
-            </div>
-          )}
-        </div>
+        <HeroImage recipeId={recipe.id} photo={hero} />
 
         <header className="mt-5">
           <h1 className="font-display text-[2.25rem] leading-[1.05]">{recipe.title}</h1>
@@ -241,6 +235,8 @@ export function RecipeDetail({ id, user }: { id: string; user: SessionUser }) {
             ))}
           </ol>
         </section>
+
+        {mine && <PhotoManager recipeId={id} photos={recipe.photos} />}
 
         {mine && (
           <section className="mt-8">
@@ -386,6 +382,173 @@ function Tick() {
     >
       <path d="m5 13 4 4L19 7" />
     </svg>
+  );
+}
+
+/** The cover slot at the top of the page. Same shape as RecipeCard's block:
+ *  a doodle by default, a real photo dropped in when the recipe has a hero. */
+function HeroImage({ recipeId, photo }: { recipeId: string; photo: PhotoSummary | undefined }) {
+  const url = usePhotoUrl(photo !== undefined ? photo.url : null);
+  return (
+    <div className="overflow-hidden rounded-[var(--radius-card)] bg-peach text-peach-ink">
+      {photo !== undefined ? (
+        // A fixed height while the fetch is in flight keeps the page from
+        // jumping the moment the object URL resolves.
+        <div className="h-52 w-full">
+          {url !== undefined && <img src={url} alt="" className="h-full w-full object-cover" />}
+        </div>
+      ) : (
+        <div className="grid h-40 place-items-center">
+          <Doodle name={doodleFor(recipeId)} className="h-24 w-24 opacity-90" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Add, promote and delete photos. Owner-only — RLS would refuse the writes
+ * from anyone else anyway, but there is no reason to show controls that only
+ * fail.
+ */
+function PhotoManager({ recipeId, photos }: { recipeId: string; photos: PhotoSummary[] }) {
+  const queryClient = useQueryClient();
+  const [pending, setPending] = useState(false);
+  const [lastUpload, setLastUpload] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = () => {
+    void queryClient.invalidateQueries({ queryKey: ['recipe', recipeId] });
+    void queryClient.invalidateQueries({ queryKey: ['recipes'] });
+  };
+
+  const setHero = useMutation({
+    mutationFn: (id: string) => api.photos.setHero(id),
+    onSuccess: refresh,
+  });
+  const remove = useMutation({
+    mutationFn: (id: string) => api.photos.remove(id),
+    onSuccess: refresh,
+  });
+
+  async function upload(file: File) {
+    setPending(true);
+    setError(null);
+    try {
+      // Resized and re-encoded in the browser before a single byte goes over
+      // the wire — see lib/downscale.ts for why that matters on a free tier.
+      const encoded = await encodeForUpload(file);
+      await api.photos.upload(recipeId, encoded.blob, encoded.width, encoded.height);
+      setLastUpload(formatBytes(encoded.blob.size));
+      refresh();
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : 'Could not upload that photo.');
+    } finally {
+      setPending(false);
+    }
+  }
+
+  const busy = pending || setHero.isPending || remove.isPending;
+
+  return (
+    <section className="mt-8">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h2 className="font-display text-2xl">Photos</h2>
+        <label
+          className={`shrink-0 rounded-full bg-primary px-4 py-2 text-sm font-bold text-primary-ink ${
+            pending ? 'opacity-60' : 'cursor-pointer'
+          }`}
+        >
+          {pending ? 'Uploading…' : 'Add photo'}
+          <input
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="sr-only"
+            disabled={pending}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              // Reset immediately so picking the same file twice in a row
+              // still fires a change event.
+              e.target.value = '';
+              if (file !== undefined) void upload(file);
+            }}
+          />
+        </label>
+      </div>
+
+      {lastUpload !== null && (
+        <p className="mb-2 text-xs text-muted">Uploaded at {lastUpload}.</p>
+      )}
+      {error !== null && (
+        <p role="alert" className="mb-2 rounded-2xl bg-danger-soft px-4 py-2.5 text-sm text-danger">
+          {error}
+        </p>
+      )}
+
+      {photos.length === 0 ? (
+        <p className="text-sm text-muted">Nothing yet. The first photo you add becomes the cover.</p>
+      ) : (
+        <ul className="grid grid-cols-3 gap-2">
+          {photos.map((photo) => (
+            <PhotoTile
+              key={photo.id}
+              photo={photo}
+              busy={busy}
+              onMakeHero={() => setHero.mutate(photo.id)}
+              onDelete={() => remove.mutate(photo.id)}
+            />
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function PhotoTile({
+  photo,
+  busy,
+  onMakeHero,
+  onDelete,
+}: {
+  photo: PhotoSummary;
+  busy: boolean;
+  onMakeHero: () => void;
+  onDelete: () => void;
+}) {
+  const url = usePhotoUrl(photo.url);
+  return (
+    <li className="overflow-hidden rounded-[var(--radius-block)] bg-card shadow-[var(--shadow-card)]">
+      <div className="relative aspect-square w-full bg-raised">
+        {url !== undefined && <img src={url} alt="" className="h-full w-full object-cover" />}
+        {photo.isHero && (
+          <span className="absolute top-1.5 left-1.5 rounded-full bg-lime px-2 py-0.5 text-[0.6875rem] font-bold text-lime-ink">
+            Cover
+          </span>
+        )}
+      </div>
+      <div className="flex items-center gap-1 p-1.5">
+        {!photo.isHero && (
+          <button
+            type="button"
+            onClick={onMakeHero}
+            disabled={busy}
+            className="rounded-full px-1.5 py-1 text-[0.6875rem] font-semibold text-muted underline disabled:opacity-50"
+          >
+            Make cover
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={onDelete}
+          disabled={busy}
+          aria-label="Delete photo"
+          className="ml-auto rounded-full px-1.5 py-1 text-[0.6875rem] font-semibold text-muted underline disabled:opacity-50"
+        >
+          Delete
+        </button>
+      </div>
+    </li>
   );
 }
 

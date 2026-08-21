@@ -39,6 +39,7 @@ async function loadRecipe(tx: ScopedDatabase, id: string) {
         isHero: recipePhotos.isHero,
         width: recipePhotos.width,
         height: recipePhotos.height,
+        byteSize: recipePhotos.byteSize,
       })
       .from(recipePhotos)
       .where(eq(recipePhotos.recipeId, id)),
@@ -75,6 +76,14 @@ export function recipeRoutes(): Hono<AppEnv> {
             SELECT rc.category_id::text FROM recipe_categories rc
              WHERE rc.recipe_id = ${recipes.id}
           ), '{}')`,
+          // A scalar subquery rather than a join, for the same reason as
+          // categoryIds above: a card only ever needs one photo id, and a join
+          // would multiply the recipe row by however many photos it has.
+          heroPhotoId: sqlRaw<string | null>`(
+            SELECT rp.id FROM recipe_photos rp
+             WHERE rp.recipe_id = ${recipes.id} AND rp.is_hero
+             LIMIT 1
+          )`,
           id: recipes.id,
           ownerId: recipes.ownerId,
           title: recipes.title,

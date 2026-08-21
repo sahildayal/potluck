@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, mediaUrl, type SessionUser } from '../lib/api.ts';
+import { api, type AttemptEntry, type SessionUser } from '../lib/api.ts';
+import { usePhotoUrl } from '../lib/usePhotoUrl.ts';
 import { Chip } from './Chip.tsx';
 
 /**
@@ -77,45 +78,13 @@ export function Attempts({ recipeId, user }: { recipeId: string; user: SessionUs
       {list.length > 0 && (
         <ul className="mb-4 grid grid-cols-2 gap-2">
           {list.map((attempt) => (
-            <li
+            <AttemptTile
               key={attempt.id}
-              className="overflow-hidden rounded-[var(--radius-block)] bg-card shadow-[var(--shadow-card)]"
-            >
-              <img
-                src={mediaUrl(attempt.url)}
-                alt={attempt.caption.length > 0 ? attempt.caption : `${attempt.cookName}'s attempt`}
-                className="aspect-square w-full object-cover"
-                loading="lazy"
-              />
-              <div className="p-3">
-                <p className="truncate text-sm font-semibold">{attempt.cookName}</p>
-                {attempt.caption.length > 0 && (
-                  <p className="mt-0.5 text-sm text-muted">{attempt.caption}</p>
-                )}
-                <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                  {attempt.wentWell === true && <Chip tone="mint">went well</Chip>}
-                  {attempt.wentWell === false && <Chip tone="peach">went sideways</Chip>}
-                  {attempt.cookId === user.id && (
-                    <button
-                      type="button"
-                      onClick={() => remove.mutate(attempt.id)}
-                      className="text-xs font-semibold text-muted underline"
-                    >
-                      delete
-                    </button>
-                  )}
-                  {attempt.cookId !== user.id && !attempt.hidden && (
-                    <button
-                      type="button"
-                      onClick={() => hide.mutate(attempt.id)}
-                      className="text-xs font-semibold text-muted underline"
-                    >
-                      hide
-                    </button>
-                  )}
-                </div>
-              </div>
-            </li>
+              attempt={attempt}
+              mine={attempt.cookId === user.id}
+              onDelete={() => remove.mutate(attempt.id)}
+              onHide={() => hide.mutate(attempt.id)}
+            />
           ))}
         </ul>
       )}
@@ -167,5 +136,50 @@ export function Attempts({ recipeId, user }: { recipeId: string; user: SessionUs
         </div>
       </div>
     </section>
+  );
+}
+
+/** One attempt photo. Split out so usePhotoUrl — a hook — has one component
+ *  per list item to attach to, rather than being called inside a .map(). */
+function AttemptTile({
+  attempt,
+  mine,
+  onDelete,
+  onHide,
+}: {
+  attempt: AttemptEntry;
+  mine: boolean;
+  onDelete: () => void;
+  onHide: () => void;
+}) {
+  const url = usePhotoUrl(attempt.url);
+  return (
+    <li className="overflow-hidden rounded-[var(--radius-block)] bg-card shadow-[var(--shadow-card)]">
+      {url !== undefined && (
+        <img
+          src={url}
+          alt={attempt.caption.length > 0 ? attempt.caption : `${attempt.cookName}'s attempt`}
+          className="aspect-square w-full object-cover"
+        />
+      )}
+      <div className="p-3">
+        <p className="truncate text-sm font-semibold">{attempt.cookName}</p>
+        {attempt.caption.length > 0 && <p className="mt-0.5 text-sm text-muted">{attempt.caption}</p>}
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          {attempt.wentWell === true && <Chip tone="mint">went well</Chip>}
+          {attempt.wentWell === false && <Chip tone="peach">went sideways</Chip>}
+          {mine && (
+            <button type="button" onClick={onDelete} className="text-xs font-semibold text-muted underline">
+              delete
+            </button>
+          )}
+          {!mine && !attempt.hidden && (
+            <button type="button" onClick={onHide} className="text-xs font-semibold text-muted underline">
+              hide
+            </button>
+          )}
+        </div>
+      </div>
+    </li>
   );
 }

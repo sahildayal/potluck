@@ -83,12 +83,22 @@ export interface RecipeSummary {
   sourceType: string;
   attributedTo: string;
   updatedAt: string;
+  heroPhotoId: string | null;
 }
 
 export interface RecipeDetail extends Recipe {
   id: string;
   ownerId: string;
-  photos: { id: string; url: string; isHero: boolean }[];
+  photos: PhotoSummary[];
+}
+
+export interface PhotoSummary {
+  id: string;
+  url: string;
+  isHero: boolean;
+  width: number | null;
+  height: number | null;
+  byteSize: number;
 }
 
 export interface Category {
@@ -233,6 +243,23 @@ export const api = {
       }),
     fork: (id: string) =>
       request<{ recipe: RecipeDetail }>(`/api/recipes/${id}/fork`, { method: 'POST' }),
+  },
+
+  photos: {
+    // The body is the already-downscaled blob; width/height ride as query
+    // params because the body slot is taken. Content-Type is set by the
+    // browser from blob.type, which is exactly the header the server checks.
+    upload: (recipeId: string, blob: Blob, width: number, height: number) =>
+      request<{ id: string; url: string; isHero: boolean }>(
+        `/api/photos/recipes/${recipeId}?width=${width}&height=${height}`,
+        { method: 'POST', body: blob },
+      ),
+    setHero: (id: string) =>
+      request<{ id: string; isHero: boolean }>(`/api/photos/${id}/hero`, {
+        method: 'POST',
+        body: '{}',
+      }),
+    remove: (id: string) => request<unknown>(`/api/photos/${id}`, { method: 'DELETE' }),
   },
 
   catalog: {

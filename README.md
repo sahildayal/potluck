@@ -433,7 +433,7 @@ Stated plainly, because a README that claims everything works is not worth readi
 
 ## 📄 License
 
-No `LICENSE` file is present in this repository yet — licensing is **TBD**. Until one is added, no license is granted; please ask before reusing.
+[MIT](LICENSE). Read it, fork it, lift whatever is useful — the RLS setup in `rls.sql` and the ephemeral-cluster job in `ci.yml` are the parts most worth stealing.
 
 ---
 

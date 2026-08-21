@@ -217,13 +217,21 @@ CREATE POLICY recipes_delete ON recipes FOR DELETE
   USING (owner_id = current_app_user());
 
 -- ---------------------------------------------------------------------------
--- Recipe children: ingredients, steps, photos
+-- Recipe children: ingredients, steps
 -- ---------------------------------------------------------------------------
 -- Visible whenever the parent recipe is; writable only by the recipe's owner.
+--
+-- The INSERT check here is only owner_id = current_app_user(), with no tie
+-- back to the recipe itself. That is safe for these two tables specifically
+-- because every write path that creates one first proves ownership of the
+-- parent recipe in the same transaction (an INSERT or an RLS-gated UPDATE on
+-- recipes), and only then inserts children under the id that came back. See
+-- recipe_photos below, which has no such upstream step and needs the check
+-- inline instead.
 DO $$
 DECLARE t text;
 BEGIN
-  FOREACH t IN ARRAY ARRAY['ingredients', 'steps', 'recipe_photos'] LOOP
+  FOREACH t IN ARRAY ARRAY['ingredients', 'steps'] LOOP
     EXECUTE format(
       'CREATE POLICY %I ON %I FOR SELECT USING (
          owner_id = current_app_user() OR can_read_recipe(recipe_id))',
@@ -245,6 +253,33 @@ BEGIN
   END LOOP;
 END
 $$;
+
+-- ---------------------------------------------------------------------------
+-- recipe_photos
+-- ---------------------------------------------------------------------------
+-- Same read/update/delete shape as ingredients and steps, but INSERT is not
+-- generated from the loop above: the upload route takes recipeId straight
+-- from the URL with no prior recipes-table operation to prove ownership in
+-- the same transaction (unlike recipes.ts, which only ever calls writeChildren
+-- with an id it just inserted or RLS-updated as that user). Without the EXISTS
+-- clause, owner_id = current_app_user() alone would let anyone who can merely
+-- read a shared recipe attach a photo to it — set owner_id to themselves,
+-- recipe_id to the recipe they were shared, done. shares_insert already
+-- guards recipe_shares the same way; this is that pattern applied here.
+CREATE POLICY recipe_photos_read ON recipe_photos FOR SELECT USING (
+  owner_id = current_app_user() OR can_read_recipe(recipe_id)
+);
+CREATE POLICY recipe_photos_insert ON recipe_photos FOR INSERT WITH CHECK (
+  owner_id = current_app_user()
+  AND EXISTS (
+    SELECT 1 FROM recipes r WHERE r.id = recipe_id AND r.owner_id = current_app_user()
+  )
+);
+CREATE POLICY recipe_photos_update ON recipe_photos FOR UPDATE
+  USING (owner_id = current_app_user())
+  WITH CHECK (owner_id = current_app_user());
+CREATE POLICY recipe_photos_delete ON recipe_photos FOR DELETE
+  USING (owner_id = current_app_user());
 
 -- ---------------------------------------------------------------------------
 -- friendships

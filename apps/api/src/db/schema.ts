@@ -125,9 +125,20 @@ export const verifications = pgTable(
 );
 
 /**
- * Signup is invite-only. A code is single-use: redeemedBy is set in the same
- * transaction that creates the account, and a partial unique index makes a
- * double redemption impossible even under a race.
+ * Invite codes for gating signup.
+ *
+ * NOT CURRENTLY ENFORCED. The table, the redemption function and these
+ * constraints all exist, but nothing in the signup path calls them — signup is
+ * open. This is deliberate for a friend group behind an unlisted URL, and it
+ * needs to change before the link is posted anywhere public.
+ *
+ * A code is single-use because `code` is the primary key and redemption is an
+ * UPDATE of that one row inside the transaction that creates the account.
+ *
+ * The unique index on `redeemedBy` enforces something different and worth
+ * naming precisely: one invite per person, ever. Postgres treats NULLs as
+ * distinct, so any number of codes can sit unredeemed; the moment two rows
+ * claim the same redeemer the second one fails.
  */
 export const inviteCodes = pgTable(
   'invite_codes',
