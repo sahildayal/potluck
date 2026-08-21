@@ -13,7 +13,9 @@
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
-    "catalog:seed": "tsx scripts/seed-catalog.ts"
+    "catalog:seed": "tsx scripts/seed-catalog.ts",
+    "catalog:plan": "tsx scripts/plan-catalog.ts",
+    "catalog:import": "tsx scripts/import-catalog.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.7",

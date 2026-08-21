@@ -1,0 +1,73 @@
+# Keeps the Render free-tier API from cold-starting during waking hours.
+#
+# Render spins a free web service down after 15 minutes with no requests, and
+# the next visitor then waits 30-60 seconds for it to boot. A periodic request
+# keeps it up.
+#
+# Why not simply run this every 5 minutes, all day:
+#
+#   Render's free tier grants 750 instance-hours per month and a 31-day month is
+#   744 hours. Pinging around the clock would consume ~99% of the allowance,
+#   leaving no room to redeploy or to add a second service. The window below is
+#   11:00-05:59 UTC, which covers roughly 07:00-01:00 US Eastern in both EDT and
+#   EST, and costs about 590 hours a month instead. Someone cooking at 4am gets a
+#   cold start; that is the trade.
+#
+# This also doubles as a crude uptime check: the job fails if the API cannot be
+# reached at all, which surfaces in the Actions tab.
+#
+# Two GitHub behaviours worth knowing before trusting this:
+#   - Scheduled workflows are queued, not guaranteed. Under load GitHub delays
+#     or drops them, so the real interval drifts past 5 minutes and the service
+#     will occasionally sleep anyway. A miss costs one cold start, nothing more.
+#   - GitHub disables scheduled workflows in a public repository after 60 days
+#     with no commit activity. If pings stop, that is the first thing to check.
+
+name: Keep warm
+
+on:
+  schedule:
+    # Every 5 minutes, 11:00-23:59 and 00:00-05:59 UTC.
+    - cron: '*/5 11-23,0-5 * * *'
+  workflow_dispatch:
+
+# A queued backlog of pings is pointless — only the newest one matters.
+concurrency:
+  group: keep-warm
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Wake the API
+        env:
+          # /ready runs a SELECT 1, so this wakes Neon as well as Render. Neon
+          # autosuspends after 5 minutes idle and a cold first query costs a few
+          # hundred milliseconds — worth avoiding for the same reason.
+          URL: https://potluck-api-pcct.onrender.com/ready
+        run: |
+          set -uo pipefail
+
+          # A cold start legitimately takes up to a minute, so a single short
+          # request would report a false outage every time the ping is the thing
+          # doing the waking. Retry with a generous timeout before failing.
+          for attempt in 1 2 3; do
+            code=$(curl -s -o /tmp/body.json -w '%{http_code}' --max-time 90 "$URL" || echo 000)
+
+            if [ "$code" = "200" ]; then
+              echo "awake (attempt $attempt): $(cat /tmp/body.json)"
+              exit 0
+            fi
+
+            echo "attempt $attempt returned HTTP $code"
+            [ "$attempt" -lt 3 ] && sleep 15
+          done
+
+          echo "::error::API did not return 200 after 3 attempts — last status $code"
+          cat /tmp/body.json || true
+          exit 1

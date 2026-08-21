@@ -303,8 +303,13 @@ async function requestBatch(
  *
  * Returns null rather than throwing for anything unusable: one malformed
  * element should cost that recipe, not the whole batch of four.
+ *
+ * Exported because the offline JSONL importer must produce byte-identical rows
+ * to this pipeline. Two normalisers that drift apart would mean the catalog's
+ * shape depends on which route a recipe arrived by, which is exactly the kind
+ * of inconsistency that is invisible until a query returns half the data.
  */
-function normalise(raw: unknown, cell: Cell): GeneratedRecipe | null {
+export function normalise(raw: unknown, cell: Cell): GeneratedRecipe | null {
   if (typeof raw !== 'object' || raw === null) return null;
   const value = raw as Record<string, unknown>;
 
