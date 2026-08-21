@@ -83,8 +83,23 @@ function cellOf(value: Record<string, unknown>): Cell | null {
  * a four-ingredient recipe. The brief asks for 6-14, and a catalog full of
  * minimum-effort entries is a worse outcome than a smaller honest one.
  */
+/**
+ * Sweet dishes are allowed one ingredient fewer.
+ *
+ * The floor of six was set against savoury dinners and is simply wrong for the
+ * sweet end: dates, almonds, cocoa, protein powder and salt is a complete
+ * energy-ball recipe, and a lassi is yogurt, fruit, honey, a spice and ice.
+ * A first sweet batch lost 50 perfectly good recipes to this, and lost them
+ * precisely in the meal types the catalog was already short of — the rule was
+ * quietly working against the gap it was meant to help fill.
+ */
+const SWEET_MEALS = new Set(['dessert', 'drink', 'snack']);
+
 function meetsBrief(recipe: GeneratedRecipe): string | null {
-  if (recipe.ingredients.length < 6) return `only ${recipe.ingredients.length} ingredients`;
+  const minIngredients = SWEET_MEALS.has(recipe.mealType) ? 5 : 6;
+  if (recipe.ingredients.length < minIngredients) {
+    return `only ${recipe.ingredients.length} ingredients`;
+  }
   if (recipe.steps.length < 4) return `only ${recipe.steps.length} steps`;
   if (recipe.summary.length === 0) return 'no summary';
   if (recipe.tags.length < 2) return 'fewer than 2 tags';
