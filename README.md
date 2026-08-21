@@ -260,7 +260,10 @@ potluck/
 ├── apps/
 │   ├── api/
 │   │   ├── drizzle/                 # generated SQL migrations + snapshots
-│   │   ├── scripts/seed-catalog.ts  # fills the public catalog; resumable, dedups by slug
+│   │   ├── scripts/seed-catalog.ts  # fills the catalog via Groq; resumable, dedups by slug
+│   │   ├── scripts/plan-catalog.ts  # slices the taxonomy into disjoint offline briefs
+│   │   ├── scripts/import-catalog.ts # reads authored JSONL back, validating hard
+│   │   ├── scripts/repair-catalog-text.ts # re-normalises rows written pre-normaliser
 │   │   └── src/
 │   │       ├── db/
 │   │       │   ├── client.ts        # asUser / asAuthService / asSystem, assertRlsEnforced
@@ -422,7 +425,7 @@ Stated plainly, because a README that claims everything works is not worth readi
 
 - **Cold starts.** Render's free tier sleeps after 15 minutes idle; the first request then takes 30–60 seconds. Neon also auto-suspends. This is the cost of the $0 constraint and is not going away on this hosting.
 - **Signup is open.** The invite machinery is real — the `invite_codes` table, a unique index on `redeemed_by` that makes a double redemption impossible, the `redeem_invite` SECURITY DEFINER function and its tests all exist and pass — but nothing in the signup path enforces it yet and there is no UI to issue a code. The comment in `auth.ts` describing signup as invite-gated is aspirational as of now; treat the deployed app as open registration.
-- **The catalog is still being filled.** `catalog:seed` takes a target (default 1,000) and is resumable — it loads existing slugs and fills gaps rather than duplicating — but it is paced by Groq's free-tier token budget, so it grows in passes rather than one run.
+- **The catalog is generated, and there are two paths for it.** `catalog:seed` writes through Groq, which is free but bound by a *daily* token cap that surfaces only as a 30-minute backoff — it grows in passes rather than one run. `catalog:plan` slices the same taxonomy into disjoint briefs that can be authored offline, and `catalog:import` reads them back through the *same* normaliser, so a row's shape never depends on which path it arrived by. Both are resumable and dedupe on slug.
 - **Catalog nutrition is an estimate.** `protein_grams` and `calories` are model-generated, not measured, and the UI says "about" for that reason. Good enough to sort and filter by; not good enough to build a diet on.
 - **Terraform is unapplied.** See above.
 - **Walled gardens are refused, not scraped.** Instagram, TikTok, Facebook and Pinterest URLs are rejected up front rather than failing slowly.
