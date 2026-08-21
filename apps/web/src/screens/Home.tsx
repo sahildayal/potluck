@@ -22,6 +22,10 @@ export function Home({ user }: { user: SessionUser }) {
 
   const recipes = useQuery({ queryKey: ['recipes'], queryFn: api.recipes.list });
   const categories = useQuery({ queryKey: ['categories'], queryFn: api.categories.list });
+  // Only for the banner's count. The catalog grows, and a hardcoded "a
+  // thousand-plus" was already wrong once — it claimed a thousand while the
+  // table held 55. Reading the real number means the copy cannot drift again.
+  const facets = useQuery({ queryKey: ['catalog', 'facets'], queryFn: api.catalog.facets });
 
   const all = recipes.data?.recipes ?? [];
 
@@ -106,7 +110,9 @@ export function Home({ user }: { user: SessionUser }) {
           <span className="min-w-0 flex-1">
             <span className="block font-display text-lg leading-tight">Not sure what to cook?</span>
             <span className="block text-sm opacity-80">
-              Browse a thousand-plus recipes and steal one
+              {facets.data === undefined
+                ? 'Browse the recipe catalog and steal one'
+                : `Browse ${facets.data.total.toLocaleString()} recipes and steal one`}
             </span>
           </span>
           <span className="shrink-0 text-xl">&rarr;</span>

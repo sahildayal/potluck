@@ -8,7 +8,7 @@ import { Link, useLocation } from 'wouter';
  * a floating button rather than a tab: it is an action, not a place, and giving
  * it a tab would mean pretending you can be "in" it.
  *
- * Browse took the slot Favourites originally had. A catalog of a thousand-plus
+ * Browse took the slot Favourites originally had. A catalog of a thousand-odd
  * recipes is a destination people arrive at with no particular recipe in mind,
  * which is what a tab is for; favourites are a filtered view of a collection
  * you are already looking at, so they live as a toggle on the Mine screen.
