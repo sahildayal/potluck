@@ -354,9 +354,26 @@ export function formatQuantity(
  */
 const FRACTIONAL_UNITS = new Set(['tsp', 'tbsp', 'cup']);
 
+/**
+ * Precision follows magnitude, because significant figures are what a cook
+ * actually needs and decimal places are not.
+ *
+ * A pound of chicken is 453.592 g, and rendering that as "453.59 g" is precise
+ * and useless — nobody weighs poultry to a hundredth of a gram. Worse, every
+ * catalog recipe is written in US units, so a metric reader would meet a
+ * two-decimal number on essentially every line. "454 g" is the same fact,
+ * legible. Small quantities keep their decimals, since 0.5 g of saffron and
+ * 1 g of saffron are genuinely different amounts.
+ */
+function significantRound(n: number): number {
+  if (n >= 10) return Math.round(n);
+  if (n >= 1) return round(n, 1);
+  return round(n, 2);
+}
+
 function formatNumber(n: number, unit: string): string {
   if (!FRACTIONAL_UNITS.has(unit)) {
-    return String(round(n, 2));
+    return String(significantRound(n));
   }
   const whole = Math.floor(n);
   const frac = n - whole;

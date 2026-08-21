@@ -195,3 +195,54 @@ describe('parseIngredient', () => {
     expect(result.item).toBe('turmeric');
   });
 });
+
+describe('formatQuantity precision', () => {
+  /**
+   * Every catalog recipe is written in US units, so a metric reader converts on
+   * essentially every line. Two decimal places there is precise and unreadable.
+   */
+  it('rounds a converted pound to whole grams', () => {
+    const lb = canonicalise('1 lb boneless chicken thighs');
+    expect(formatQuantity(lb, 'metric')).toEqual({ value: '454', unit: 'g' });
+  });
+
+  it('rounds a converted cup to whole millilitres', () => {
+    const cup = canonicalise('1 cup jasmine rice');
+    expect(formatQuantity(cup, 'metric')).toEqual({ value: '237', unit: 'ml' });
+  });
+
+  /**
+   * Spoons survive the conversion to metric on purpose — a metric kitchen still
+   * says "2 tbsp", and "30 ml of gochujang" is nobody's instruction.
+   */
+  it('leaves small volumes as spoons even in metric', () => {
+    const tbsp = canonicalise('2 tbsp gochujang');
+    expect(formatQuantity(tbsp, 'metric')).toEqual({ value: '2', unit: 'tbsp' });
+  });
+
+  it('keeps one decimal between 1 and 10, where the fraction still matters', () => {
+    expect(formatQuantity({ qty: 2.46, unit: 'g', dimension: 'mass' }, 'metric')).toEqual({
+      value: '2.5',
+      unit: 'g',
+    });
+  });
+
+  it('keeps two decimals below 1, where 0.5 g and 1 g are different amounts', () => {
+    expect(formatQuantity({ qty: 0.25, unit: 'g', dimension: 'mass' }, 'metric')).toEqual({
+      value: '0.25',
+      unit: 'g',
+    });
+  });
+
+  it('still renders kilograms with a decimal rather than a fraction', () => {
+    expect(formatQuantity({ qty: 1500, unit: 'g', dimension: 'mass' }, 'metric')).toEqual({
+      value: '1.5',
+      unit: 'kg',
+    });
+  });
+
+  it('leaves spoon measures fractional, which is how they are spoken', () => {
+    const tsp = canonicalise('1/2 tsp turmeric');
+    expect(formatQuantity(tsp, 'imperial')).toEqual({ value: '1/2', unit: 'tsp' });
+  });
+});
