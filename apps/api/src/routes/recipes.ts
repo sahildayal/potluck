@@ -1,4 +1,4 @@
-import { desc, eq } from 'drizzle-orm';
+import { desc, eq, sql as sqlRaw } from 'drizzle-orm';
 import { Hono } from 'hono';
 import {
   createRecipeSchema,
@@ -69,6 +69,12 @@ export function recipeRoutes(): Hono<AppEnv> {
     const rows = await asUser(currentUserId(c), (tx) =>
       tx
         .select({
+          // Aggregated rather than joined: a join would multiply a recipe by its
+          // categories and the list would show duplicates.
+          categoryIds: sqlRaw<string[]>`coalesce(array(
+            SELECT rc.category_id::text FROM recipe_categories rc
+             WHERE rc.recipe_id = ${recipes.id}
+          ), '{}')`,
           id: recipes.id,
           ownerId: recipes.ownerId,
           title: recipes.title,

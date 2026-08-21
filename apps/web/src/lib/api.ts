@@ -9,6 +9,19 @@ import type { Recipe } from '@potluck/core';
  * localStorage where any script on the page could read it.
  */
 
+/**
+ * In development the Vite proxy makes /api same-origin, so this is empty and
+ * requests stay relative. In production the API lives on its own host, so every
+ * request needs an absolute URL — and, because that makes the session cookie
+ * cross-site, the API must set SameSite=None; Secure to match.
+ */
+const API_BASE = (import.meta.env['VITE_API_URL'] ?? '').replace(/\/$/, '');
+
+/** Prefixes a server-relative media path with the API host. */
+export function mediaUrl(path: string): string {
+  return path.startsWith('http') ? path : `${API_BASE}${path}`;
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -20,7 +33,7 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(path, {
+  const response = await fetch(`${API_BASE}${path}`, {
     ...init,
     credentials: 'include',
     headers: {
@@ -61,6 +74,7 @@ export interface SessionUser {
 
 export interface RecipeSummary {
   id: string;
+  categoryIds: string[];
   ownerId: string;
   title: string;
   servings: number | null;
@@ -130,6 +144,52 @@ export interface BrowseParams {
   offset?: number;
 }
 
+export interface ImportJob {
+  id: string;
+  kind: 'url' | 'image' | 'text';
+  status: 'queued' | 'reading' | 'ready' | 'failed';
+  error: string | null;
+  draft: RecipeDraft | null;
+}
+
+export interface RecipeDraft {
+  title: string;
+  servings: number | null;
+  ingredients: { rawText: string }[];
+  steps: { body: string }[];
+  notes?: string;
+  via?: string;
+}
+
+export interface Friend {
+  id: string;
+  handle: string;
+  displayName: string;
+  status: 'pending' | 'accepted';
+  direction: 'incoming' | 'outgoing';
+}
+
+export interface SharedRecipe {
+  id: string;
+  title: string;
+  servings: number | null;
+  attributedTo: string;
+  ownerHandle: string;
+  ownerName: string;
+}
+
+export interface AttemptEntry {
+  id: string;
+  caption: string;
+  wentWell: boolean | null;
+  createdAt: string;
+  cookId: string;
+  cookHandle: string;
+  cookName: string;
+  hidden: boolean;
+  url: string;
+}
+
 export const api = {
   me: () => request<{ user: SessionUser | null }>('/api/me'),
 
@@ -190,6 +250,69 @@ export const api = {
     get: (slug: string) => request<{ recipe: CatalogDetail }>(`/api/catalog/${slug}`),
     save: (slug: string) =>
       request<{ recipe: { id: string; title: string } }>(`/api/catalog/${slug}/save`, {
+        method: 'POST',
+        body: '{}',
+      }),
+  },
+
+  imports: {
+    list: () => request<{ jobs: ImportJob[] }>('/api/imports'),
+    create: (kind: 'url' | 'image' | 'text', payload: string) =>
+      request<{ job: { id: string; status: string } }>('/api/imports', {
+        method: 'POST',
+        body: JSON.stringify({ kind, payload }),
+      }),
+    get: (id: string) => request<{ job: ImportJob }>(`/api/imports/${id}`),
+    confirm: (id: string, recipe: unknown) =>
+      request<{ recipe: { id: string; title: string } }>(`/api/imports/${id}/confirm`, {
+        method: 'POST',
+        body: JSON.stringify(recipe),
+      }),
+    discard: (id: string) => request<unknown>(`/api/imports/${id}`, { method: 'DELETE' }),
+  },
+
+  social: {
+    findUser: (handle: string) =>
+      request<{ user: { id: string; handle: string; displayName: string }; known: boolean }>(
+        `/api/social/users/${encodeURIComponent(handle)}`,
+      ),
+    friends: () => request<{ friends: Friend[] }>('/api/social/friends'),
+    addFriend: (handle: string) =>
+      request<{ status: string }>('/api/social/friends', {
+        method: 'POST',
+        body: JSON.stringify({ handle }),
+      }),
+    acceptFriend: (handle: string) =>
+      request<{ status: string }>(`/api/social/friends/${encodeURIComponent(handle)}/accept`, {
+        method: 'POST',
+        body: '{}',
+      }),
+    removeFriend: (handle: string) =>
+      request<unknown>(`/api/social/friends/${encodeURIComponent(handle)}`, { method: 'DELETE' }),
+
+    sharedWithMe: () => request<{ recipes: SharedRecipe[] }>('/api/social/shared-with-me'),
+    share: (recipeId: string, handle: string) =>
+      request<{ shared: boolean }>('/api/social/shares', {
+        method: 'POST',
+        body: JSON.stringify({ recipeId, handle }),
+      }),
+
+    attempts: (recipeId: string) =>
+      request<{ attempts: AttemptEntry[] }>(`/api/social/recipes/${recipeId}/attempts`),
+    postAttempt: (recipeId: string, blob: Blob, caption: string, wentWell: boolean | null) =>
+      request<{ id: string; url: string }>(`/api/social/recipes/${recipeId}/attempts`, {
+        method: 'POST',
+        body: blob,
+        headers: {
+          'X-Photo-Type': blob.type,
+          'X-Caption': caption,
+          'X-Went-Well': wentWell === null ? '' : String(wentWell),
+        },
+      }),
+    deleteAttempt: (id: string) =>
+      request<unknown>(`/api/social/attempts/${id}`, { method: 'DELETE' }),
+    hideAttempt: (id: string) =>
+      request<{ hidden: boolean }>(`/api/social/attempts/${id}/hide`, {
         method: 'POST',
         body: '{}',
       }),

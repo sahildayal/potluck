@@ -32,6 +32,9 @@ export function RecipeEditor({ id, user }: { id?: string; user: SessionUser }) {
   const [stepText, setStepText] = useState('');
   const [notes, setNotes] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [categoryIds, setCategoryIds] = useState<string[]>([]);
+
+  const categories = useQuery({ queryKey: ['categories'], queryFn: api.categories.list });
 
   useEffect(() => {
     const recipe = existing.data?.recipe;
@@ -43,6 +46,7 @@ export function RecipeEditor({ id, user }: { id?: string; user: SessionUser }) {
     setNotes(recipe.notes);
     setIngredientText(recipe.ingredients.map((i) => i.rawText).join('\n'));
     setStepText(recipe.steps.map((s) => s.body).join('\n\n'));
+    setCategoryIds(recipe.categoryIds ?? []);
   }, [existing.data]);
 
   const save = useMutation({
@@ -53,6 +57,7 @@ export function RecipeEditor({ id, user }: { id?: string; user: SessionUser }) {
         attributedTo: attributedTo.trim(),
         story: story.trim(),
         notes: notes.trim(),
+        categoryIds,
         ingredients: toLines(ingredientText).map((rawText) => ({ rawText })),
         steps: toParagraphs(stepText).map((body) => ({ body })),
       };
@@ -106,6 +111,37 @@ export function RecipeEditor({ id, user }: { id?: string; user: SessionUser }) {
               hint="Dadi, Mum, that place in Mutrah…"
             />
           </div>
+        </div>
+
+        <div>
+          <span className="mb-1.5 block text-sm font-bold">Sections</span>
+          <div className="flex flex-wrap gap-2">
+            {(categories.data?.categories ?? []).map((category) => {
+              const on = categoryIds.includes(category.id);
+              return (
+                <button
+                  key={category.id}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() =>
+                    setCategoryIds((previous) =>
+                      previous.includes(category.id)
+                        ? previous.filter((id) => id !== category.id)
+                        : [...previous, category.id],
+                    )
+                  }
+                  className={`rounded-full px-4 py-2 text-sm font-bold transition-colors ${
+                    on ? 'bg-primary text-primary-ink' : 'bg-surface text-muted'
+                  }`}
+                >
+                  {category.name}
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-1 text-xs text-muted">
+            Where it shows up on your home screen. A recipe can sit in more than one.
+          </p>
         </div>
 
         <Area

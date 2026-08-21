@@ -109,6 +109,19 @@ export const auth = betterAuth({
   },
 
   advanced: {
+    /**
+     * The web app is served from a different host than the API in production,
+     * which makes the session cookie cross-site. Browsers drop a cross-site
+     * cookie unless it is SameSite=None AND Secure, so both are required — and
+     * Secure means this only works over HTTPS, which Render provides.
+     *
+     * In development the Vite proxy makes everything same-origin, so Lax is
+     * correct there and avoids needing HTTPS locally.
+     */
+    defaultCookieAttributes:
+      env.NODE_ENV === 'production'
+        ? { sameSite: 'none', secure: true, httpOnly: true }
+        : { sameSite: 'lax', secure: false, httpOnly: true },
     database: {
       // Our columns are uuid, and every RLS policy casts app.user_id to uuid.
       // better-auth's default id generator would produce something that fails

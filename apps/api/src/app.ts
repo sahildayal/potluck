@@ -11,6 +11,8 @@ import { photoRoutes } from './routes/photos.js';
 import { recipeRoutes } from './routes/recipes.js';
 import { shoppingRoutes } from './routes/shopping.js';
 import { catalogRoutes } from './routes/catalog.js';
+import { importRoutes } from './routes/imports.js';
+import { socialRoutes } from './routes/social.js';
 
 const env = loadEnv();
 
@@ -28,7 +30,7 @@ export function createApp(): Hono<AppEnv> {
     cors({
       origin: [env.APP_URL],
       credentials: true,
-      allowHeaders: ['Content-Type'],
+      allowHeaders: ['Content-Type', 'X-Photo-Type', 'X-Caption', 'X-Went-Well'],
       allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
     }),
   );
@@ -68,6 +70,8 @@ export function createApp(): Hono<AppEnv> {
   app.route('/api/photos', photoRoutes());
   app.route('/api/shopping', shoppingRoutes());
   app.route('/api/catalog', catalogRoutes());
+  app.route('/api/imports', importRoutes());
+  app.route('/api/social', socialRoutes());
 
   app.notFound((c) => c.json({ error: 'Not found' }, 404));
 

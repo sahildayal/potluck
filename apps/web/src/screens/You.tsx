@@ -69,9 +69,14 @@ export function You({ user }: { user: SessionUser }) {
 
         <Section title="Friends">
           <p className="text-muted">
-            Sharing is coming next. When it lands, friends will find you as{' '}
-            <strong className="text-ink">@{user.handle}</strong>.
+            Friends find you as <strong className="text-ink">@{user.handle}</strong>.
           </p>
+          <a
+            href="/friends"
+            className="mt-3 inline-block rounded-full bg-primary px-5 py-2.5 font-bold text-primary-ink"
+          >
+            Manage friends
+          </a>
         </Section>
 
         <button

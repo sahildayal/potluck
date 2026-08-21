@@ -34,12 +34,13 @@ export function Home({ user }: { user: SessionUser }) {
     const needle = query.trim().toLowerCase();
     return all.filter((r) => {
       if (favouritesOnly && !r.isFavorite) return false;
+      if (category !== null && !(r.categoryIds ?? []).includes(category)) return false;
       if (needle.length === 0) return true;
       return (
         r.title.toLowerCase().includes(needle) || r.attributedTo.toLowerCase().includes(needle)
       );
     });
-  }, [all, query, favouritesOnly]);
+  }, [all, query, favouritesOnly, category]);
 
   return (
     <div className="wash-lime safe-top min-h-dvh">
@@ -140,13 +141,22 @@ export function Home({ user }: { user: SessionUser }) {
         <NavSpacer />
       </div>
 
-      <Link
-        href="/recipe/new"
-        className="safe-bottom fixed right-5 bottom-24 z-20 grid h-14 w-14 place-items-center rounded-full bg-coral text-2xl font-bold text-white shadow-[var(--shadow-lift)]"
-        aria-label="Add a recipe"
-      >
-        +
-      </Link>
+      <div className="safe-bottom fixed right-5 bottom-24 z-20 flex flex-col items-end gap-2">
+        <Link
+          href="/import"
+          className="grid h-12 w-12 place-items-center rounded-full bg-surface shadow-[var(--shadow-lift)]"
+          aria-label="Import a recipe from a link or photo"
+        >
+          <Doodle name="loaf" className="h-6 w-6 text-coral" />
+        </Link>
+        <Link
+          href="/recipe/new"
+          className="grid h-14 w-14 place-items-center rounded-full bg-coral text-2xl font-bold text-white shadow-[var(--shadow-lift)]"
+          aria-label="Add a recipe by hand"
+        >
+          +
+        </Link>
+      </div>
 
       <BottomNav />
     </div>

@@ -2,9 +2,10 @@ import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useLocation } from 'wouter';
 import { formatQuantity, scale, type UnitSystem } from '@potluck/core';
-import { api, type SessionUser } from '../lib/api.ts';
+import { api, mediaUrl, type SessionUser } from '../lib/api.ts';
 import { Chip } from '../components/Chip.tsx';
 import { Doodle, doodleFor } from '../components/Doodle.tsx';
+import { Attempts } from '../components/Attempts.tsx';
 
 export function RecipeDetail({ id, user }: { id: string; user: SessionUser }) {
   const queryClient = useQueryClient();
@@ -17,6 +18,8 @@ export function RecipeDetail({ id, user }: { id: string; user: SessionUser }) {
   const recipe = data?.recipe;
   const [servings, setServings] = useState<number | null>(null);
   const [checked, setChecked] = useState<Set<string>>(new Set());
+  const [shareTo, setShareTo] = useState('');
+  const [shareNote, setShareNote] = useState<string | null>(null);
 
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ['recipe', id] });
@@ -31,6 +34,15 @@ export function RecipeDetail({ id, user }: { id: string; user: SessionUser }) {
     mutationFn: (next: number | null) => api.recipes.setRating(id, next),
     onSuccess: refresh,
   });
+  const share = useMutation({
+    mutationFn: (handle: string) => api.social.share(id, handle),
+    onSuccess: () => {
+      setShareTo('');
+      setShareNote('Shared. They will see it under Friends.');
+    },
+    onError: () => setShareNote('No one with that handle, or you do not own this recipe.'),
+  });
+
   const toShopping = useMutation({
     mutationFn: () => api.shopping.fromRecipe(id),
     onSuccess: () => {
@@ -101,7 +113,7 @@ export function RecipeDetail({ id, user }: { id: string; user: SessionUser }) {
 
         <div className="overflow-hidden rounded-[var(--radius-card)] bg-peach text-peach-ink">
           {hero !== undefined ? (
-            <img src={hero.url} alt="" className="h-52 w-full object-cover" />
+            <img src={mediaUrl(hero.url)} alt="" className="h-52 w-full object-cover" />
           ) : (
             <div className="grid h-40 place-items-center">
               <Doodle name={doodleFor(recipe.id)} className="h-24 w-24 opacity-90" />
@@ -229,6 +241,46 @@ export function RecipeDetail({ id, user }: { id: string; user: SessionUser }) {
             ))}
           </ol>
         </section>
+
+        {mine && (
+          <section className="mt-8">
+            <h2 className="mb-3 font-display text-2xl">Share it</h2>
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                setShareNote(null);
+                share.mutate(shareTo.trim().toLowerCase());
+              }}
+              className="flex gap-2"
+            >
+              <input
+                value={shareTo}
+                onChange={(e) => setShareTo(e.target.value)}
+                placeholder="A friend's handle"
+                aria-label="Share with a handle"
+                autoCapitalize="none"
+                className="min-w-0 flex-1 rounded-full border-2 border-line bg-surface px-5 py-3 outline-none focus:border-ink"
+              />
+              <button
+                type="submit"
+                disabled={shareTo.trim().length === 0 || share.isPending}
+                className="shrink-0 rounded-full bg-primary px-5 py-3 font-bold text-primary-ink disabled:opacity-40"
+              >
+                Share
+              </button>
+            </form>
+            {shareNote !== null && (
+              <p className="mt-2 rounded-2xl bg-lilac px-4 py-2.5 text-sm font-semibold text-lilac-ink">
+                {shareNote}
+              </p>
+            )}
+            <p className="mt-2 text-xs text-muted">
+              Sharing lets them read and cook it. It never lets them edit yours.
+            </p>
+          </section>
+        )}
+
+        <Attempts recipeId={id} user={user} />
 
         {recipe.notes.length > 0 && (
           <section className="mt-8">

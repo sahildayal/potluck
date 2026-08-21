@@ -147,15 +147,19 @@ CREATE POLICY users_auth ON users FOR ALL TO potluck_auth
 -- ---------------------------------------------------------------------------
 -- users
 -- ---------------------------------------------------------------------------
--- You can see yourself, anyone you are accepted friends with, and anyone who
--- has shared a recipe with you (so their name renders on the shared card).
+-- You can see yourself, anyone you have a friendship row with in EITHER
+-- direction and at any status, and anyone who has shared a recipe with you.
+--
+-- Pending counts deliberately. Restricting this to accepted meant a pending
+-- request joined against a user row you could not read, so the row vanished and
+-- you could never see who was asking to be your friend. Someone who has sent
+-- you a request has already revealed themselves to you by doing so.
 CREATE POLICY users_read ON users FOR SELECT USING (
   id = current_app_user()
   OR EXISTS (
     SELECT 1 FROM friendships f
-    WHERE f.status = 'accepted'
-      AND ((f.requester_id = current_app_user() AND f.addressee_id = users.id)
-        OR (f.addressee_id = current_app_user() AND f.requester_id = users.id))
+    WHERE (f.requester_id = current_app_user() AND f.addressee_id = users.id)
+       OR (f.addressee_id = current_app_user() AND f.requester_id = users.id)
   )
   OR EXISTS (
     SELECT 1 FROM recipe_shares s
@@ -344,6 +348,30 @@ BEGIN
   RETURN affected = 1;
 END
 $$;
+
+-- ---------------------------------------------------------------------------
+-- Finding someone by handle
+-- ---------------------------------------------------------------------------
+-- The users policy deliberately hides anyone you have no relationship with,
+-- which is right — and which also makes it impossible to look up the person you
+-- are trying to befriend, because you have no relationship with them yet.
+--
+-- This is the narrow, audited hole for that, and it is shaped so it cannot be
+-- used to enumerate anyone: it takes an EXACT handle and returns at most one
+-- row. There is no prefix match and no listing, so you can only find someone
+-- whose handle you already know.
+CREATE OR REPLACE FUNCTION find_user_by_handle(p_handle text)
+RETURNS TABLE (id uuid, handle text, display_name text)
+LANGUAGE sql STABLE SECURITY DEFINER AS $$
+  SELECT u.id, u.handle, u.display_name
+    FROM users u
+   WHERE lower(u.handle) = lower(p_handle)
+     AND u.id <> current_app_user()
+   LIMIT 1;
+$$;
+
+REVOKE ALL ON FUNCTION find_user_by_handle(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION find_user_by_handle(text) TO potluck_app;
 
 REVOKE ALL ON FUNCTION redeem_invite(text, uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION redeem_invite(text, uuid) TO potluck_app;
