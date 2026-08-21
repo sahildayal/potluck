@@ -23,6 +23,17 @@ const total = Number(process.argv[2] ?? 1300);
 const slices = Number(process.argv[3] ?? 10);
 const outDir = process.argv[4] ?? '.';
 
+/**
+ * `--meals=dessert,drink` restricts the plan to those meal types.
+ *
+ * The weights in MEAL_WEIGHTS describe a whole catalog built in one pass. Once
+ * rows exist, a shortfall in one meal type cannot be corrected by generating
+ * more of everything — it needs a run aimed at the gap.
+ */
+const mealArg = process.argv.find((a) => a.startsWith('--meals='));
+const onlyMeals =
+  mealArg === undefined ? null : new Set(mealArg.slice('--meals='.length).split(','));
+
 const databaseUrl = process.env['DATABASE_URL'];
 if (databaseUrl === undefined || databaseUrl.length === 0) {
   console.error('DATABASE_URL is not set');
@@ -51,7 +62,12 @@ async function main(): Promise<void> {
   // lands on the same title.
   const covered = new Set(rows.map((r) => `${r.cuisine}|${r.meal_type}|${r.main_protein}`));
 
-  const plan = buildPlan(Math.ceil(total * 2.5), 20260821);
+  const drawn = buildPlan(Math.ceil(total * (onlyMeals === null ? 2.5 : 30)), 20260821);
+  const plan = onlyMeals === null ? drawn : drawn.filter((c) => onlyMeals.has(c.mealType));
+
+  if (onlyMeals !== null) {
+    console.log(`restricted to ${[...onlyMeals].join(', ')}: ${plan.length} cells available`);
+  }
   const fresh = plan.filter((c) => !covered.has(`${c.cuisine}|${c.mealType}|${c.protein}`));
   const rest = plan.filter((c) => covered.has(`${c.cuisine}|${c.mealType}|${c.protein}`));
 

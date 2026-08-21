@@ -106,6 +106,38 @@ export const PROTEINS: [string, number][] = [
   ['seitan', 2],
 ];
 
+/**
+ * Sweet meals draw from their own pool rather than filtering the savoury one.
+ *
+ * Filtering was the first approach and it quietly starved the catalog: only
+ * four of the twenty-two proteins are sweet-compatible, so desserts could never
+ * exceed about 1.2% of rows and drinks 0.5% no matter how the meal weights were
+ * set. A run of 1,019 recipes produced 10 desserts and no drinks at all, which
+ * is not what "a variety of things" means to anyone reading the app.
+ *
+ * These are all genuine protein sources a dessert can be built on, which keeps
+ * the high-protein brief intact instead of quietly abandoning it for the sweet
+ * half of the catalog.
+ */
+export const SWEET_PROTEINS: [string, number][] = [
+  ['greek yogurt', 14],
+  ['protein powder', 12],
+  ['cottage cheese', 10],
+  ['eggs', 9],
+  ['ricotta', 7],
+  ['peanut butter', 7],
+  ['silken tofu', 6],
+  ['almond butter', 5],
+  ['black beans', 4],
+  ['chickpeas', 4],
+  ['milk', 6],
+  ['kefir', 4],
+  ['oats', 6],
+  ['cream cheese', 5],
+  ['almonds', 4],
+  ['pistachios', 3],
+];
+
 export const TECHNIQUES = [
   'sheet-pan roast',
   'one-pot',
@@ -167,7 +199,7 @@ export function mulberry32(seed: number): () => number {
 const TECHNIQUES_BY_MEAL: Partial<Record<MealType, string[]>> = {
   soup: ['one-pot', 'soup pot', 'slow braise', 'pressure cooker', 'blender', 'meal-prep batch'],
   salad: ['no-cook assembly', 'salad toss', 'bowl', 'grill', 'marinated and seared', 'meal-prep batch'],
-  drink: ['blender'],
+  drink: ['blender', 'no-cook assembly', 'overnight / make-ahead'],
   dessert: [
     'no-cook assembly', 'baked casserole', 'blender', 'overnight / make-ahead',
     'griddle', 'meal-prep batch',
@@ -183,14 +215,10 @@ const TECHNIQUES_BY_MEAL: Partial<Record<MealType, string[]>> = {
 };
 
 function plausible(cell: Cell): boolean {
-  const sweet = cell.mealType === 'dessert' || cell.mealType === 'drink';
-  const savouryOnly = [
-    'chicken', 'beef', 'ground turkey', 'pork', 'salmon', 'white fish',
-    'shrimp', 'tuna', 'tofu', 'tempeh', 'seitan', 'halloumi', 'edamame',
-    'black beans', 'chickpeas', 'lentils', 'paneer', 'quinoa',
-  ];
-  if (sweet && savouryOnly.includes(cell.protein)) return false;
-
+  // The sweet/savoury check that used to live here is gone: buildPlan now draws
+  // dessert and drink proteins from SWEET_PROTEINS, so a salmon dessert cannot
+  // be generated in the first place. Rejecting after the fact was what capped
+  // the sweet half of the catalog at roughly one percent.
   const allowed = TECHNIQUES_BY_MEAL[cell.mealType];
   if (allowed !== undefined && !allowed.includes(cell.technique)) return false;
 
@@ -205,11 +233,19 @@ export function buildPlan(count: number, seed = 20260820): Cell[] {
   // Cap the attempts so an over-constrained taxonomy fails fast rather than
   // spinning forever looking for combinations that do not exist.
   for (let attempts = 0; cells.length < count && attempts < count * 40; attempts += 1) {
+    const mealType = pickWeighted(MEAL_WEIGHTS, random);
+    const sweet = mealType === 'dessert' || mealType === 'drink';
+    // Draw the technique from the ones this meal actually permits, rather than
+    // drawing from all twenty and discarding the misses. Rejection sampling
+    // silently rescaled the meal weights by how permissive each meal was: a
+    // drink allows three techniques of twenty, so asking for 3% of the catalog
+    // yielded 0.45% of it. Choosing from the allowed set makes MEAL_WEIGHTS
+    // mean what it says.
     const cell: Cell = {
       cuisine: pick(CUISINES, random),
-      mealType: pickWeighted(MEAL_WEIGHTS, random),
-      protein: pickWeighted(PROTEINS, random),
-      technique: pick(TECHNIQUES, random),
+      mealType,
+      protein: pickWeighted(sweet ? SWEET_PROTEINS : PROTEINS, random),
+      technique: pick(TECHNIQUES_BY_MEAL[mealType] ?? TECHNIQUES, random),
     };
     if (!plausible(cell)) continue;
 
