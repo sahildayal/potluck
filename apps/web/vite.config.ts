@@ -31,6 +31,11 @@ export default defineConfig({
         // backend is cold. Shell is precached; recipe reads are stale-while-
         // revalidate so an offline cook still sees what they saw this morning.
         globPatterns: ['**/*.{js,css,html,woff2}'],
+        // _worker.js is Cloudflare's, not the app's. Pages consumes it as the
+        // edge worker rather than serving it, so precaching it would have the
+        // service worker fetch a path that resolves to index.html and store
+        // that under a .js name.
+        globIgnores: ['_worker.js'],
         runtimeCaching: [
           {
             urlPattern: /\/api\/recipes/,

@@ -17,7 +17,7 @@
     "test:integration": "pnpm --filter @potluck/api test:integration",
     "db:generate": "pnpm --filter @potluck/api db:generate",
     "db:migrate": "pnpm --filter @potluck/api db:migrate",
-    "deploy:pages": "pnpm --filter @potluck/web build && wrangler pages deploy apps/web/dist --project-name potluck --branch main --commit-dirty=true"
+    "deploy:pages": "VITE_API_URL= pnpm --filter @potluck/web build && wrangler pages deploy apps/web/dist --project-name potluck --branch main --commit-dirty=true"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

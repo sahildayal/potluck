@@ -1,7 +1,0 @@
-# Cloudflare Pages serves files first and falls through to this.
-#
-# The app routes /browse, /shopping and /recipe/:id itself, so a hard refresh
-# on any of them asks Pages for a file that was never built. Without this rule
-# that is a 404 on every page except the root — which only shows up when
-# someone reloads, not while clicking around.
-/*    /index.html   200
