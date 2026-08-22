@@ -202,6 +202,11 @@ export interface AttemptEntry {
 
 export const api = {
   me: () => request<{ user: SessionUser | null }>('/api/me'),
+  updateMe: (patch: { unitPreference?: 'metric' | 'imperial'; theme?: string }) =>
+    request<{ user: Partial<SessionUser> }>('/api/me', {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }),
 
   signUp: (input: { email: string; password: string; name: string; handle: string }) =>
     request<{ user: SessionUser }>('/api/auth/sign-up/email', {

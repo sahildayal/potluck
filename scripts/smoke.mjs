@@ -211,6 +211,41 @@ async function main() {
     `list gave ${String(listed?.heroPhotoId)}, upload gave ${String(uploaded?.id)}`,
   );
 
+  // Preferences. The measurement toggle was read-only for a while because this
+  // endpoint did not exist, which is the kind of gap a UI screenshot hides and
+  // a request does not.
+  const before = await alice('/api/me');
+  check(
+    'new accounts default to imperial',
+    before.body?.user?.unitPreference === 'imperial',
+    `got ${String(before.body?.user?.unitPreference)}`,
+  );
+
+  const switched = await alice('/api/me', {
+    method: 'PATCH',
+    body: JSON.stringify({ unitPreference: 'metric' }),
+  });
+  check('can switch measurement system', switched.status === 200, `status ${switched.status}`);
+
+  const after = await alice('/api/me');
+  check('the switch persists', after.body?.user?.unitPreference === 'metric');
+
+  const nonsense = await alice('/api/me', {
+    method: 'PATCH',
+    body: JSON.stringify({ unitPreference: 'furlongs' }),
+  });
+  check('rejects a unit system it does not have', nonsense.status === 400, `status ${nonsense.status}`);
+
+  const escalate = await alice('/api/me', {
+    method: 'PATCH',
+    body: JSON.stringify({ handle: 'admin', email: 'someone@else.test' }),
+  });
+  check(
+    'cannot change identity through the preferences endpoint',
+    escalate.status === 400,
+    `status ${escalate.status}`,
+  );
+
   const strangerUpload = await bob(`/api/photos/recipes/${recipe.id}?width=1&height=1`, {
     method: 'POST',
     headers: { 'Content-Type': 'image/png' },

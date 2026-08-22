@@ -45,7 +45,11 @@ export const users = pgTable(
     emailVerified: boolean('email_verified').notNull().default(false),
     avatarKey: text('avatar_key'),
     theme: text('theme').notNull().default('system'),
-    unitPreference: text('unit_preference').notNull().default('metric'),
+    // Imperial, because the catalog is authored entirely in US units and the
+    // app is about what Americans cook. Defaulting to metric meant every
+    // ingredient line arrived converted, so "1 lb chicken" greeted a new user
+    // as "454 g" — a conversion of something they never saw.
+    unitPreference: text('unit_preference').notNull().default('imperial'),
     invitedBy: uuid('invited_by'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

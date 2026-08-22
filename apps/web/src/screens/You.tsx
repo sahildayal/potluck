@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type SessionUser } from '../lib/api.ts';
 import { BottomNav, NavSpacer } from '../components/BottomNav.tsx';
 import { Chip } from '../components/Chip.tsx';
@@ -7,6 +7,14 @@ import { readStoredTheme, storeTheme, type ThemeChoice } from '../lib/theme.ts';
 
 export function You({ user }: { user: SessionUser }) {
   const queryClient = useQueryClient();
+
+  // The preference lives on the server, not in localStorage, because it has to
+  // follow the person to their phone rather than staying on the laptop where
+  // they happened to set it.
+  const units = useMutation({
+    mutationFn: (choice: 'metric' | 'imperial') => api.updateMe({ unitPreference: choice }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['me'] }),
+  });
   const [theme, setTheme] = useState<ThemeChoice>(readStoredTheme());
   const recipes = useQuery({ queryKey: ['recipes'], queryFn: api.recipes.list });
 
@@ -57,12 +65,25 @@ export function You({ user }: { user: SessionUser }) {
         </Section>
 
         <Section title="Measurements">
-          <p className="text-muted">
-            Showing quantities in{' '}
-            <strong className="text-ink">
-              {user.unitPreference === 'imperial' ? 'cups and ounces' : 'grams and millilitres'}
-            </strong>
-            . Recipes keep the words their source used, so anything we couldn&rsquo;t convert stays
+          <div className="flex gap-1 rounded-full bg-raised p-1">
+            {(['imperial', 'metric'] as const).map((choice) => (
+              <button
+                key={choice}
+                type="button"
+                onClick={() => units.mutate(choice)}
+                disabled={units.isPending}
+                aria-pressed={user.unitPreference === choice}
+                className={`flex-1 rounded-full px-3 py-2.5 text-sm font-bold transition-colors ${
+                  user.unitPreference === choice ? 'bg-primary text-primary-ink' : 'text-muted'
+                }`}
+              >
+                {choice === 'imperial' ? 'Cups & oz' : 'Grams & ml'}
+              </button>
+            ))}
+          </div>
+          <p className="mt-2 text-xs text-muted">
+            Tap any quantity in a recipe to see that one amount another way, without changing this.
+            Recipes keep the words their source used, so anything we couldn&rsquo;t convert stays
             exactly as written.
           </p>
         </Section>

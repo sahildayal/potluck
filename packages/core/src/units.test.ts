@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   canonicalise,
+  conversions,
   formatQuantity,
   parseIngredient,
   parseQuantity,
@@ -244,5 +245,45 @@ describe('formatQuantity precision', () => {
   it('leaves spoon measures fractional, which is how they are spoken', () => {
     const tsp = canonicalise('1/2 tsp turmeric');
     expect(formatQuantity(tsp, 'imperial')).toEqual({ value: '1/2', unit: 'tsp' });
+  });
+});
+
+describe('conversions', () => {
+  it('leads with the preferred system, then offers the alternatives', () => {
+    const lb = canonicalise('1 lb chicken thighs');
+    expect(conversions(lb, 'imperial')).toEqual([
+      { value: '1', unit: 'lb' },
+      { value: '454', unit: 'g' },
+      { value: '16', unit: 'oz' },
+    ]);
+  });
+
+  it('leads with grams for a metric cook, same quantity', () => {
+    const lb = canonicalise('1 lb chicken thighs');
+    expect(conversions(lb, 'metric')[0]).toEqual({ value: '454', unit: 'g' });
+  });
+
+  it('agrees in number on cups, the one unit that has to', () => {
+    expect(conversions(canonicalise('2 cups rice'), 'imperial')[0]).toEqual({
+      value: '2',
+      unit: 'cups',
+    });
+    expect(conversions(canonicalise('1 cup milk'), 'imperial')[0]).toEqual({
+      value: '1',
+      unit: 'cup',
+    });
+  });
+
+  it('does not offer a third of a tablespoon for a teaspoon', () => {
+    const units = conversions(canonicalise('1 tsp turmeric'), 'metric').map((c) => c.unit);
+    expect(units).not.toContain('tbsp');
+  });
+
+  it('offers nothing for a quantity it never understood', () => {
+    expect(conversions(canonicalise('a pinch of saffron'), 'metric')).toEqual([]);
+  });
+
+  it('leaves counts alone rather than inventing a mass for them', () => {
+    expect(conversions(canonicalise('3 eggs'), 'imperial')).toEqual([{ value: '3', unit: '' }]);
   });
 });

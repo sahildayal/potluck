@@ -1,0 +1,1 @@
+ALTER TABLE "users" ALTER COLUMN "unit_preference" SET DEFAULT 'imperial';

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useLocation } from 'wouter';
-import { formatQuantity, scale, type UnitSystem } from '@potluck/core';
+import { conversions, formatQuantity, scale, type UnitSystem } from '@potluck/core';
 import { api, ApiError, type PhotoSummary, type SessionUser } from '../lib/api.ts';
 import { encodeForUpload, formatBytes } from '../lib/downscale.ts';
 import { usePhotoUrl } from '../lib/usePhotoUrl.ts';
@@ -69,9 +69,23 @@ export function RecipeDetail({ id, user }: { id: string; user: SessionUser }) {
         baseServings !== null && shownServings !== null
           ? scale(canonical.qty, baseServings, shownServings)
           : canonical.qty;
-      return { ingredient, formatted: formatQuantity({ ...canonical, qty: scaled }, system) };
+      const shown = { ...canonical, qty: scaled };
+      return {
+        ingredient,
+        formatted: formatQuantity(shown, system),
+        options: conversions(shown, system),
+      };
     });
   }, [recipe, baseServings, shownServings, system]);
+
+  const toggle = (key: string): void => {
+    setChecked((previous) => {
+      const next = new Set(previous);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
 
   if (isLoading) return <Centered>Fetching the recipe…</Centered>;
   if (isError || recipe === undefined) return <Centered>Couldn&rsquo;t find that recipe.</Centered>;
@@ -163,49 +177,57 @@ export function RecipeDetail({ id, user }: { id: string; user: SessionUser }) {
           </div>
 
           <ul className="rounded-[var(--radius-card)] bg-card p-2 shadow-[var(--shadow-card)]">
-            {ingredients.map(({ ingredient, formatted }, index) => {
+            {ingredients.map(({ ingredient, formatted, options }, index) => {
               const key = ingredient.id ?? String(index);
               const isChecked = checked.has(key);
               return (
-                <li key={key}>
+                <li
+                  key={key}
+                  className={`flex items-center gap-3 rounded-2xl px-3 py-2.5 transition-colors ${
+                    isChecked ? 'text-muted line-through' : ''
+                  }`}
+                >
+                  {/*
+                    Three controls rather than one row-wide button, because the
+                    quantity has to do something different from the rest of the
+                    line and a button cannot legally contain another button.
+                    Ticking off is still the whole-line gesture: the circle and
+                    the name both toggle, and only the number cycles units.
+                  */}
                   <button
                     type="button"
-                    onClick={() =>
-                      setChecked((previous) => {
-                        const next = new Set(previous);
-                        if (next.has(key)) next.delete(key);
-                        else next.add(key);
-                        return next;
-                      })
-                    }
+                    onClick={() => toggle(key)}
                     aria-pressed={isChecked}
-                    className={`flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition-colors ${
-                      isChecked ? 'text-muted line-through' : ''
+                    aria-label={`Tick off ${ingredient.item.length > 0 ? ingredient.item : ingredient.rawText}`}
+                    className={`grid h-6 w-6 shrink-0 place-items-center rounded-full border-2 ${
+                      isChecked ? 'border-mint-ink bg-mint text-mint-ink' : 'border-line-strong'
                     }`}
                   >
-                    <span
-                      className={`grid h-6 w-6 shrink-0 place-items-center rounded-full border-2 ${
-                        isChecked ? 'border-mint-ink bg-mint text-mint-ink' : 'border-line-strong'
-                      }`}
-                    >
-                      {isChecked && <Tick />}
-                    </span>
-                    <span>
-                      {/* An unparsed measurement shows the source's own words.
-                          "a pinch of saffron" must never become "0.5 ml". */}
-                      {formatted !== null && ingredient.item.length > 0 ? (
-                        <>
-                          <span className="tnum font-bold">
-                            {formatted.value}
-                            {formatted.unit.length > 0 ? ` ${formatted.unit}` : ''}
-                          </span>{' '}
-                          {ingredient.item}
-                        </>
-                      ) : (
-                        ingredient.rawText
-                      )}
-                    </span>
+                    {isChecked && <Tick />}
                   </button>
+
+                  {/* An unparsed measurement shows the source's own words.
+                      "a pinch of saffron" must never become "0.5 ml". */}
+                  {formatted !== null && ingredient.item.length > 0 ? (
+                    <span className="flex-1 text-left">
+                      <Quantity options={options} />{' '}
+                      <button
+                        type="button"
+                        onClick={() => toggle(key)}
+                        className="text-left"
+                      >
+                        {ingredient.item}
+                      </button>
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => toggle(key)}
+                      className="flex-1 text-left"
+                    >
+                      {ingredient.rawText}
+                    </button>
+                  )}
                 </li>
               );
             })}
@@ -555,5 +577,51 @@ function PhotoTile({
 function Centered({ children }: { children: React.ReactNode }) {
   return (
     <div className="wash-blush grid min-h-dvh place-items-center p-8 text-muted">{children}</div>
+  );
+}
+
+/**
+ * A quantity you can tap to see the same amount said another way.
+ *
+ * The question "how much is that in grams?" arrives while reading a recipe, not
+ * while sitting in a settings screen, so the answer belongs where it is asked.
+ * Tapping cycles through the sensible renderings and wraps around; it changes
+ * nothing stored, nothing shared, and nobody else's view.
+ *
+ * The choice is per-ingredient and deliberately not remembered. A cook checking
+ * one line against their scale does not want every other line to follow, and a
+ * preference that changes globally from a tap on a number is a surprise.
+ */
+function Quantity({ options }: { options: { value: string; unit: string }[] }) {
+  const [index, setIndex] = useState(0);
+
+  // The options list is recomputed when servings or the unit preference change,
+  // and a stale index would then point at a rendering that no longer exists.
+  const safe = options.length === 0 ? 0 : index % options.length;
+  const current = options[safe];
+  if (current === undefined) return null;
+
+  const only = options.length < 2;
+
+  return (
+    <button
+      type="button"
+      onClick={() => setIndex((i) => i + 1)}
+      disabled={only}
+      title={only ? undefined : options.map((o) => `${o.value} ${o.unit}`.trim()).join(' · ')}
+      aria-label={
+        only
+          ? undefined
+          : `${current.value} ${current.unit}. Tap to show this amount in other units.`
+      }
+      className={
+        only
+          ? 'tnum font-bold'
+          : 'tnum rounded-md px-1 font-bold underline decoration-dotted decoration-from-font underline-offset-4'
+      }
+    >
+      {current.value}
+      {current.unit.length > 0 ? ` ${current.unit}` : ''}
+    </button>
   );
 }

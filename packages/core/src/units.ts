@@ -396,3 +396,81 @@ function formatNumber(n: number, unit: string): string {
   if (frac < 0.02) return String(whole);
   return String(round(n, 2));
 }
+
+/**
+ * Every sensible way to say the same quantity, preferred rendering first.
+ *
+ * This backs tap-to-convert: a cook reading "1 lb chicken" who thinks in grams
+ * wants the answer where the question occurred, not in a settings screen two
+ * taps away and a scroll back. Cycling through these in place answers it
+ * without changing the recipe, the stored data, or anyone else's view.
+ *
+ * The list is deliberately short. Offering every unit that could technically
+ * express a mass turns a helpful tap into a slot machine, so each entry has to
+ * be one a person would actually say: a pound of chicken is worth seeing in
+ * grams and ounces, not in kilograms and certainly not in teaspoons.
+ */
+export function conversions(
+  q: CanonicalQuantity,
+  system: UnitSystem,
+): { value: string; unit: string }[] {
+  if (q.qty === null) return [];
+  if (q.dimension === 'count' || q.dimension === 'none') {
+    const only = formatQuantity(q, system);
+    return only === null ? [] : [only];
+  }
+
+  const qty = q.qty;
+  const candidates: string[] =
+    q.dimension === 'mass'
+      ? // Kilograms only once there is a kilogram to speak of; pounds only past
+        // a quarter of one, below which nobody says "0.2 lb".
+        [
+          ...(qty >= 1000 ? ['kg'] : []),
+          'g',
+          ...(qty >= 113 ? ['lb'] : []),
+          'oz',
+        ]
+      : [
+          ...(qty >= 1000 ? ['l'] : []),
+          'ml',
+          ...(qty >= 59 ? ['cup'] : []),
+          // Same floor the display ladder uses. Below about three quarters of a
+          // tablespoon the answer is "1/3 tbsp", which is arithmetic rather
+          // than an instruction.
+          ...(qty >= 11 ? ['tbsp'] : []),
+          ...(qty < 60 ? ['tsp'] : []),
+        ];
+
+  const preferred = formatQuantity(q, system);
+  const seen = new Set<string>();
+  const out: { value: string; unit: string }[] = [];
+
+  const push = (entry: { value: string; unit: string } | null): void => {
+    if (entry === null) return;
+    const key = `${entry.value} ${entry.unit}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({ ...entry, unit: pluralise(entry.value, entry.unit) });
+  };
+
+  push(preferred);
+  for (const unit of candidates) {
+    const def = UNITS[unit];
+    if (def === undefined || def.dimension !== q.dimension) continue;
+    push({ value: formatNumber(qty / def.factor, unit), unit });
+  }
+
+  return out;
+}
+
+/**
+ * "cup" is the only kitchen unit that has to agree in number.
+ *
+ * Nobody writes "2 cup", but "2 lb" and "16 oz" are both idiomatic and "2 mls"
+ * is wrong, so a general pluraliser would do more harm than good here.
+ */
+function pluralise(value: string, unit: string): string {
+  if (unit !== 'cup') return unit;
+  return value === '1' ? unit : `${unit}s`;
+}

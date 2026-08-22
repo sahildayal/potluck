@@ -53,7 +53,11 @@ export const auth = betterAuth({
     // anyone with the URL, which is a deliberate trade for an unlisted link and
     // a friend group, and has to change before the link is posted publicly.
     requireEmailVerification: false,
-    minPasswordLength: 10,
+    // Eight, not ten. This guards a recipe collection behind an unlisted link,
+    // and every extra character is typed on a phone keyboard by someone who
+    // only wanted to see a curry. Sessions are httpOnly cookies and passwords
+    // are scrypt-hashed either way.
+    minPasswordLength: 8,
   },
 
   user: {
@@ -69,7 +73,10 @@ export const auth = betterAuth({
       unitPreference: {
         type: 'string',
         required: false,
-        defaultValue: 'metric',
+        // Must match the column default in schema.ts. better-auth applies this
+        // one on insert, so the two disagreeing would mean a user's preference
+        // depended on which path created the row.
+        defaultValue: 'imperial',
         input: true,
       },
       invitedBy: { type: 'string', required: false, input: false },
