@@ -36,7 +36,17 @@ export function SignIn() {
       }
       await queryClient.invalidateQueries({ queryKey: ['me'] });
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : 'Could not reach Potluck. Try again.');
+      // better-auth rate-limits repeated attempts, and its own wording ("Too
+      // many requests") reads like a fault in the app rather than something
+      // that clears on its own. Someone fumbling a password is exactly who
+      // meets this, and exactly who needs telling to simply wait.
+      if (caught instanceof ApiError && caught.status === 429) {
+        setError('Too many tries in a row. Wait a minute, then try again.');
+      } else if (caught instanceof ApiError) {
+        setError(caught.message);
+      } else {
+        setError('Could not reach Potluck. Try again.');
+      }
     } finally {
       setBusy(false);
     }
