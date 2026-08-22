@@ -214,8 +214,13 @@ export const api = {
       body: JSON.stringify(input),
     }),
 
-  signIn: (input: { email: string; password: string }) =>
-    request<{ user: SessionUser }>('/api/auth/sign-in/email', {
+  /**
+   * Takes an email address or a handle. The server resolves a handle to its
+   * email before handing the request to better-auth, so the address never
+   * comes back to the browser.
+   */
+  signIn: (input: { identifier: string; password: string }) =>
+    request<{ user: SessionUser }>('/api/sign-in', {
       method: 'POST',
       body: JSON.stringify(input),
     }),

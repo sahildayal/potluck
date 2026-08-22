@@ -5,7 +5,7 @@ import { logger } from 'hono/logger';
 import { secureHeaders } from 'hono/secure-headers';
 import { auth } from './auth.js';
 import { loadEnv } from './env.js';
-import { asUser, sqlClient } from './db/client.js';
+import { asAuthService, asUser, sqlClient } from './db/client.js';
 import { users } from './db/schema.js';
 import { withSession, type AppEnv } from './middleware/session.js';
 import { categoryRoutes } from './routes/categories.js';
@@ -66,6 +66,63 @@ export function createApp(): Hono<AppEnv> {
   // better-auth owns everything under its basePath. Registered before the
   // session middleware, since it is what creates sessions in the first place.
   app.on(['GET', 'POST'], '/api/auth/*', (c) => auth.handler(c.req.raw));
+
+  /**
+   * Sign in with either an email address or a handle.
+   *
+   * People remember the name their friends see, not the address they typed once
+   * at signup — and the app deliberately never displays that address back to
+   * them. Requiring the exact email to return therefore asks for the one string
+   * a user has no way to look up.
+   *
+   * The handle is resolved to an email server-side and the request is then
+   * handed to better-auth unchanged, so the email never travels to the client
+   * and there is no lookup endpoint for anyone else to point at either.
+   *
+   * A missing handle returns the same generic failure as a wrong password.
+   * Handles are already public — the whole friends feature is people searching
+   * for each other by handle — so this discloses nothing new; the point is
+   * simply not to tell an attacker which half of the pair was wrong.
+   */
+  app.post('/api/sign-in', async (c) => {
+    const body = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
+    const identifier = typeof body?.['identifier'] === 'string' ? body['identifier'].trim() : '';
+    const password = typeof body?.['password'] === 'string' ? body['password'] : '';
+
+    const rejection = c.json({ message: 'Invalid email or password' }, 401);
+    if (identifier.length === 0 || password.length === 0) return rejection;
+
+    let email = identifier;
+    if (!identifier.includes('@')) {
+      // Handles are stored lowercase; a person typing their own name may not be.
+      const [found] = await asAuthService((tx) =>
+        tx
+          .select({ email: users.email })
+          .from(users)
+          .where(eq(users.handle, identifier.toLowerCase()))
+          .limit(1),
+      );
+      if (found === undefined) return rejection;
+      email = found.email;
+    }
+
+    // Rebuilt rather than forwarded: the body changes, so a copied
+    // Content-Length would describe the old one. Origin and Cookie are carried
+    // over because better-auth checks the first for CSRF and sets the second.
+    const headers = new Headers({ 'Content-Type': 'application/json' });
+    const origin = c.req.header('Origin');
+    if (origin !== undefined) headers.set('Origin', origin);
+    const cookie = c.req.header('Cookie');
+    if (cookie !== undefined) headers.set('Cookie', cookie);
+
+    const url = new URL(c.req.url);
+    url.pathname = '/api/auth/sign-in/email';
+    url.search = '';
+
+    return auth.handler(
+      new Request(url, { method: 'POST', headers, body: JSON.stringify({ email, password }) }),
+    );
+  });
 
   app.use('/api/*', withSession);
 

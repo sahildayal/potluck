@@ -211,6 +211,45 @@ async function main() {
     `list gave ${String(listed?.heroPhotoId)}, upload gave ${String(uploaded?.id)}`,
   );
 
+  // Signing in by handle as well as by email.
+  //
+  // Added after a real lockout: the account existed, the password was right,
+  // and the email had one character different from the handle. The app never
+  // displays the address it was created with, so there was nothing to check
+  // against.
+  const byHandle = await fetch(`${base}/api/sign-in`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Origin: origin },
+    body: JSON.stringify({ identifier: `alice${suffix}`, password: 'a-really-long-password' }),
+  });
+  check('can sign in with a handle', byHandle.status === 200, `status ${byHandle.status}`);
+
+  const byEmail = await fetch(`${base}/api/sign-in`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Origin: origin },
+    body: JSON.stringify({ identifier: `alice-${suffix}@smoke.test`, password: 'a-really-long-password' }),
+  });
+  check('can still sign in with an email', byEmail.status === 200, `status ${byEmail.status}`);
+
+  const wrongPassword = await fetch(`${base}/api/sign-in`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Origin: origin },
+    body: JSON.stringify({ identifier: `alice${suffix}`, password: 'not-the-password' }),
+  });
+  check('a wrong password still fails', wrongPassword.status === 401, `status ${wrongPassword.status}`);
+
+  const noSuchHandle = await fetch(`${base}/api/sign-in`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Origin: origin },
+    body: JSON.stringify({ identifier: 'nobodyhasthishandle', password: 'a-really-long-password' }),
+  });
+  const noSuchBody = await noSuchHandle.json().catch(() => ({}));
+  check(
+    'an unknown handle fails the same way as a wrong password',
+    noSuchHandle.status === 401 && /invalid email or password/i.test(String(noSuchBody.message ?? '')),
+    `status ${noSuchHandle.status}, message ${String(noSuchBody.message)}`,
+  );
+
   // Preferences. The measurement toggle was read-only for a while because this
   // endpoint did not exist, which is the kind of gap a UI screenshot hides and
   // a request does not.

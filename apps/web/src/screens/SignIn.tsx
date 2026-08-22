@@ -32,7 +32,7 @@ export function SignIn() {
       if (joining) {
         await api.signUp({ email, password, name, handle: handle.trim().toLowerCase() });
       } else {
-        await api.signIn({ email, password });
+        await api.signIn({ identifier: email.trim(), password });
       }
       await queryClient.invalidateQueries({ queryKey: ['me'] });
     } catch (caught) {
@@ -102,14 +102,23 @@ export function SignIn() {
                 />
               </>
             )}
-            <Field label="Email" type="email" value={email} onChange={setEmail} autoComplete="email" />
+            {/* Text, not email, when signing in: type="email" makes the browser
+                reject a bare handle before the form is ever submitted. */}
+            <Field
+              label={joining ? 'Email' : 'Email or handle'}
+              type={joining ? 'email' : 'text'}
+              value={email}
+              onChange={setEmail}
+              autoComplete={joining ? 'email' : 'username'}
+              hint={joining ? 'Nothing is ever sent here. Any address works.' : undefined}
+            />
             <Field
               label="Password"
               type="password"
               value={password}
               onChange={setPassword}
               autoComplete={joining ? 'new-password' : 'current-password'}
-              hint={joining ? 'At least 10 characters.' : undefined}
+              hint={joining ? 'At least 8 characters.' : undefined}
             />
           </div>
 
