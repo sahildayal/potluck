@@ -18,19 +18,27 @@ import { socialRoutes } from './routes/social.js';
 
 const env = loadEnv();
 
+/** APP_URL may list several origins while the frontend moves between hosts. */
+function appOrigins(value: string): string[] {
+  return value
+    .split(',')
+    .map((u) => u.trim().replace(/\/$/, ''))
+    .filter((u) => u.length > 0);
+}
+
 export function createApp(): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
 
   app.use('*', secureHeaders());
   if (env.NODE_ENV !== 'test') app.use('*', logger());
 
-  // The PWA is served from a different origin (Cloudflare Pages) than the API,
-  // so credentialed CORS is required and the origin allowlist must be exact —
-  // a wildcard is rejected by browsers when credentials are included anyway.
+  // The PWA is served from a different origin than the API, so credentialed
+  // CORS is required and the allowlist must be exact — a wildcard is rejected
+  // by browsers outright once credentials are involved.
   app.use(
     '/api/*',
     cors({
-      origin: [env.APP_URL],
+      origin: appOrigins(env.APP_URL),
       credentials: true,
       allowHeaders: ['Content-Type', 'X-Photo-Type', 'X-Caption', 'X-Went-Well'],
       allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],

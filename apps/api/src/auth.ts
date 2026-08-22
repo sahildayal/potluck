@@ -30,9 +30,19 @@ const authDb = drizzle(authClient, {
   schema: { users, sessions, accounts, verifications },
 });
 
+/**
+ * APP_URL may list several origins while the frontend moves between hosts.
+ * The first is canonical; all of them are trusted for CSRF.
+ */
+const appOrigins = env.APP_URL.split(',')
+  .map((u) => u.trim().replace(/\/$/, ''))
+  .filter((u) => u.length > 0);
+const canonicalAppUrl = appOrigins[0] ?? 'http://localhost:5173';
+const trustedAppOrigins = appOrigins;
+
 export const auth = betterAuth({
   secret: env.AUTH_SECRET,
-  baseURL: env.APP_URL,
+  baseURL: canonicalAppUrl,
   basePath: '/api/auth',
 
   database: drizzleAdapter(authDb, {
@@ -142,7 +152,7 @@ export const auth = betterAuth({
     },
   },
 
-  trustedOrigins: [env.APP_URL],
+  trustedOrigins: trustedAppOrigins,
 });
 
 export type Session = typeof auth.$Infer.Session;

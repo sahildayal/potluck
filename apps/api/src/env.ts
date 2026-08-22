@@ -9,7 +9,23 @@ import { z } from 'zod';
 const schema = z.object({
   DATABASE_URL: z.string().url(),
   AUTH_SECRET: z.string().min(16, 'AUTH_SECRET must be at least 16 characters'),
-  APP_URL: z.string().url().default('http://localhost:5173'),
+  /**
+   * Where the PWA is served from. Accepts a comma-separated list.
+   *
+   * A list rather than a single value because moving the frontend between hosts
+   * is otherwise a flag day: the CORS allowlist and the cookie origin have to be
+   * exact, so switching them means the old site breaks the instant the new one
+   * starts working. With both listed, the two can overlap for as long as the
+   * migration needs. The first entry is canonical and is what better-auth uses
+   * as its base URL.
+   */
+  APP_URL: z
+    .string()
+    .default('http://localhost:5173')
+    .refine(
+      (value) => value.split(',').every((u) => URL.canParse(u.trim())),
+      'APP_URL must be a URL, or a comma-separated list of URLs',
+    ),
   API_PORT: z.coerce.number().int().positive().default(8787),
   GROQ_API_KEY: z.string().optional(),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
